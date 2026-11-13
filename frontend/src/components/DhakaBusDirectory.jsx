@@ -255,19 +255,64 @@ export default function DhakaBusDirectory() {
 
           {/* ── Route Search Results ── */}
           {routeResult && (
-            <div className="space-y-4">
+            <div className="space-y-5">
+              {/* ── Metro Rail Shortest Way Path Recommendation (When Metro is Available) ── */}
+              {routeResult.metro_available && routeResult.shortest_way && (
+                <div className="rounded-2xl border-2 border-red-500 bg-gradient-to-r from-red-50 via-orange-50 to-amber-50 p-5 shadow-sm">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div className="flex items-start gap-3.5">
+                      <div className="w-12 h-12 rounded-2xl bg-red-600 text-white flex items-center justify-center font-bold text-2xl shadow-md shadow-red-600/30 shrink-0">
+                        🚇
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-xs font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-red-600 text-white shadow-2xs">
+                            ⚡ Shortest Way Path (সেরা ও দ্রুততম পথ)
+                          </span>
+                          <span className="text-xs font-bold text-red-800 bg-red-100/90 border border-red-200 px-2.5 py-0.5 rounded-full">
+                            Saves {routeResult.shortest_way.time_saved_min || 40}+ mins vs Road Traffic
+                          </span>
+                        </div>
+                        <h3 className="text-lg font-extrabold text-slate-900 mt-1">
+                          {routeResult.shortest_way.title} ({routeResult.shortest_way.title_bn || 'মেট্রোরেল'})
+                        </h3>
+                        <p className="text-xs text-slate-600 mt-0.5 max-w-2xl leading-relaxed">
+                          {routeResult.shortest_way.reason || 'Dhaka Metro Rail (MRT-6) is the shortest, fastest path. 100% traffic-jam free air-conditioned electric train operating every 5-8 minutes.'}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-3 bg-white px-4 py-2.5 rounded-xl border border-red-200 shadow-2xs self-start sm:self-auto shrink-0">
+                      <div className="text-center">
+                        <span className="text-[10px] text-slate-400 block uppercase font-bold">Fastest Time</span>
+                        <span className="text-base font-black text-red-600">
+                          ~{routeResult.shortest_way.est_time_min} mins
+                        </span>
+                      </div>
+                      <div className="w-px h-7 bg-slate-200"></div>
+                      <div className="text-center">
+                        <span className="text-[10px] text-slate-400 block uppercase font-bold">Govt. Fare</span>
+                        <span className="text-base font-black text-emerald-700">
+                          ৳{routeResult.shortest_way.fare_bdt || 45}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               <div className="flex items-center justify-between">
                 <h3 className="text-sm font-bold text-slate-800">
-                  Query Results for <span className="text-emerald-700">{routeResult.from}</span> → <span className="text-emerald-700">{routeResult.to}</span>
+                  Transport Options for <span className="text-emerald-700">{routeResult.from}</span> → <span className="text-emerald-700">{routeResult.to}</span>
                 </h3>
-                {routeResult.available && (
+                {routeResult.has_direct_bus && (
                   <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
-                    {routeResult.count} Direct Service{routeResult.count > 1 ? 's' : ''} Available
+                    {routeResult.count} Direct Bus Service{routeResult.count > 1 ? 's' : ''}
                   </span>
                 )}
               </div>
 
-              {routeResult.available && routeResult.buses && routeResult.buses.length > 0 ? (
+              {routeResult.has_direct_bus && routeResult.buses && routeResult.buses.length > 0 ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {routeResult.buses.map((bus) => {
                     const isExpanded = expandedBusId === bus.id;
@@ -392,34 +437,31 @@ export default function DhakaBusDirectory() {
                     );
                   })}
                 </div>
-              ) : (
-                /* No Direct Bus Available -> Rich Multi-Modal Connecting Transit Options */
-                <div className="space-y-4">
-                  <div className="rounded-2xl border border-amber-200 bg-amber-50/80 p-5 text-slate-800">
-                    <div className="flex items-start gap-3">
-                      <div className="w-9 h-9 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center font-bold text-lg shrink-0">
-                        ℹ️
-                      </div>
-                      <div className="space-y-1">
-                        <h4 className="text-base font-bold text-slate-900">
-                          No direct bus is available for this route ({routeResult.from} → {routeResult.to})
-                        </h4>
-                        <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
-                          Currently, no single bus operates direct from <strong>{routeResult.from}</strong> to <strong>{routeResult.to}</strong>.
-                          Explore the recommended connecting transit routes below using <strong>2-bus transfers</strong>, <strong>Dhaka Metro Rail (MRT-6)</strong>, and local feeder transit (Auto-rickshaw, CNG, Rickshaw):
-                        </p>
-                      </div>
+              ) : !routeResult.has_direct_bus && (
+                /* No Direct Bus Available Notice */
+                <div className="rounded-2xl border border-amber-200 bg-amber-50/80 p-5 text-slate-800">
+                  <div className="flex items-start gap-3">
+                    <div className="w-9 h-9 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center font-bold text-lg shrink-0">
+                      ℹ️
+                    </div>
+                    <div className="space-y-1">
+                      <h4 className="text-base font-bold text-slate-900">
+                        No direct single bus is available for this route ({routeResult.from} → {routeResult.to})
+                      </h4>
+                      <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
+                        Explore the recommended connecting transit routes below using <strong>2-bus transfers</strong>, <strong>Dhaka Metro Rail (MRT-6)</strong>, and local feeder transit (Auto-rickshaw, CNG, Rickshaw):
+                      </p>
                     </div>
                   </div>
-
-                  {/* OpenStreetMap Transit Map when No Direct Bus is Available */}
-                  <OSMTransitMap
-                    busTransit={routeResult}
-                    fromLocation={fromLoc}
-                    toLocation={toLoc}
-                  />
                 </div>
               )}
+
+              {/* ── OpenStreetMap Transit Map (Visualizes Shortest Metro Path or Bus Routes) ── */}
+              <OSMTransitMap
+                busTransit={routeResult}
+                fromLocation={fromLoc}
+                toLocation={toLoc}
+              />
             </div>
           )}
         </div>

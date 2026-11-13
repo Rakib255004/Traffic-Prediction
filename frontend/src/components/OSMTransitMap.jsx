@@ -459,48 +459,10 @@ export default function OSMTransitMap({ busTransit, fromLocation, toLocation }) 
       const originCoord = getStopCoord(fromLocation);
       const destCoord = getStopCoord(toLocation);
 
-      // ── Scenario A: Direct Single Bus Line ──
-      if (available && buses.length > 0) {
-        // Pedestrian access point ~250m offset to represent walk to main stoppage
-        const walkOffsetCoord = [
-          originCoord[0] - 0.0022,
-          originCoord[1] - 0.0025
-        ];
-
-        // 1. Walk: Yellow (Walk is Yellow)
-        const walkGeom = await fetchAccurateRoadGeometry(walkOffsetCoord, originCoord, 'foot');
-        segmentsToRender.push({
-          mode: 'walk',
-          color: MODE_COLORS.walk.stroke, // Yellow
-          isDotted: true,
-          pillText: '5 min walk',
-          pillIcon: '🚶',
-          coords: walkGeom,
-          instructions: `Walk ~250m to ${buses[0]?.from_stop || fromLocation} bus stand.`,
-        });
-
-        // 2. Bus: Blue (Bus is Blue)
-        const busGeom = await fetchAccurateRoadGeometry(originCoord, destCoord, 'driving');
-        segmentsToRender.push({
-          mode: 'bus',
-          name: buses[0]?.name || 'Direct Bus',
-          color: MODE_COLORS.bus.stroke, // Blue
-          isDotted: false,
-          pillText: `${buses[0]?.stops_on_journey ? Math.round(buses[0].stops_on_journey * 2.5) : 25} min`,
-          pillIcon: '🚌',
-          coords: busGeom,
-          buses: buses,
-          fare: buses[0]?.fare_bdt || 25,
-          time: 25,
-          from: fromLocation,
-          to: toLocation,
-          instructions: `Board ${buses.slice(0, 3).map(b => b.name_bn || b.name).join(' or ')} directly to ${toLocation}.`,
-        });
-      }
-      // ── Scenario B: Multi-Modal Connecting Route (Matching Reference Image) ──
-      else if (activeRoute && activeRoute.legs) {
+      // ── Priority 1: Render Selected Itinerary Tab (Metro Direct, Direct Bus, or Multimodal) ──
+      if (activeRoute && activeRoute.legs) {
         const legs = activeRoute.legs;
-        const hasMetro = activeRoute.modes?.includes('metro') || legs.some(l => l.mode === 'metro');
+        const hasMetro = activeRoute.modes?.includes('metro') || legs.some(l => l.mode === 'metro') || activeRoute.is_metro_direct;
 
         // Initial Walk Leg: Yellow (Walk is Yellow)
         const walkOffsetCoord = [
@@ -513,14 +475,52 @@ export default function OSMTransitMap({ busTransit, fromLocation, toLocation }) 
           name: 'Walk',
           color: MODE_COLORS.walk.stroke, // Yellow
           isDotted: true,
-          pillText: '10 min walk',
+          pillText: '5 min walk',
           pillIcon: '🚶',
           coords: walkGeom,
-          instructions: `Walk from ${fromLocation} to the main road boarding stoppage.`,
+          instructions: `Walk from ${fromLocation} to the station / transit stoppage.`,
         });
 
-        if (hasMetro) {
-          // ── METRO MULTI-MODAL ROUTE: Walk (Yellow) ➔ Bus (Blue) ➔ Metro (Red) ➔ CNG/Rickshaw (Green) ──
+        // ── Case A: Direct Metro Route (MRT Line 6) - Shortest & Fastest Path ──
+        if (activeRoute.is_metro_direct || (hasMetro && !legs.some(l => l.mode === 'bus'))) {
+          const metroStationCoords = getMetroLineCoordinates(fromLocation, toLocation);
+          segmentsToRender.push({
+            mode: 'metro',
+            name: 'Dhaka Metro Rail (MRT Line 6)',
+            color: MODE_COLORS.metro.stroke, // Red
+            isDotted: false,
+            pillText: 'Metro',
+            pillIcon: '🚇',
+            coords: metroStationCoords,
+            isMetro: true,
+            fare: activeRoute.total_est_fare_bdt || 45,
+            time: activeRoute.total_est_time_min || 24,
+            from: activeRoute.from_station || fromLocation,
+            to: activeRoute.to_station || toLocation,
+            instructions: 'Board elevated Metro Rail train. 100% traffic-jam free air-conditioned rapid transit.',
+          });
+        }
+        // ── Case B: Direct Road Bus Route ──
+        else if (activeRoute.type === 'direct_bus') {
+          const busGeom = await fetchAccurateRoadGeometry(originCoord, destCoord, 'driving');
+          segmentsToRender.push({
+            mode: 'bus',
+            name: activeRoute.title || 'Direct Road Bus',
+            color: MODE_COLORS.bus.stroke, // Blue
+            isDotted: false,
+            pillText: `${activeRoute.total_est_time_min || 35} min`,
+            pillIcon: '🚌',
+            coords: busGeom,
+            buses: activeRoute.buses || buses,
+            fare: activeRoute.total_est_fare_bdt || 35,
+            time: activeRoute.total_est_time_min || 35,
+            from: fromLocation,
+            to: toLocation,
+            instructions: `Board direct bus service to ${toLocation}. Subject to street traffic.`,
+          });
+        }
+        // ── Case C: Multi-Modal Metro Route with Feeder Buses / CNG ──
+        else if (hasMetro) {
           const leg1 = legs.find(l => l.mode === 'bus' || l.step_num === 1);
           const metroLeg = legs.find(l => l.mode === 'metro');
           const leg3 = legs.find(l => l.step_num === 3 || l.mode === 'auto_rickshaw' || l.mode === 'rickshaw');
@@ -584,8 +584,9 @@ export default function OSMTransitMap({ busTransit, fromLocation, toLocation }) 
             to: toLocation,
             instructions: leg3?.instructions || `Take local CNG or auto-rickshaw to ${toLocation}.`,
           });
-        } else {
-          // ── TWO-BUS TRANSFER ROUTE: Walk (Yellow) ➔ 1st Bus (Blue) ➔ 2nd Bus (Purple) ──
+        }
+        // ── Case D: Two-Bus Transfer Route (Walk Yellow ➔ 1st Bus Blue ➔ 2nd Bus Purple) ──
+        else {
           const leg1 = legs.find(l => l.step_num === 1);
           const legHub = legs.find(l => l.mode === 'transfer');
           const leg2 = legs.find(l => l.step_num === 3 || (l.step_num === 2 && l.mode !== 'transfer'));
@@ -631,6 +632,44 @@ export default function OSMTransitMap({ busTransit, fromLocation, toLocation }) 
             instructions: leg2?.instructions || `Board onward connecting service to ${toLocation}.`,
           });
         }
+      }
+      // ── Priority 2: Standalone Direct Single Bus Line (Fallback) ──
+      else if (available && buses.length > 0) {
+        // Pedestrian access point ~250m offset to represent walk to main stoppage
+        const walkOffsetCoord = [
+          originCoord[0] - 0.0022,
+          originCoord[1] - 0.0025
+        ];
+
+        // 1. Walk: Yellow (Walk is Yellow)
+        const walkGeom = await fetchAccurateRoadGeometry(walkOffsetCoord, originCoord, 'foot');
+        segmentsToRender.push({
+          mode: 'walk',
+          color: MODE_COLORS.walk.stroke, // Yellow
+          isDotted: true,
+          pillText: '5 min walk',
+          pillIcon: '🚶',
+          coords: walkGeom,
+          instructions: `Walk ~250m to ${buses[0]?.from_stop || fromLocation} bus stand.`,
+        });
+
+        // 2. Bus: Blue (Bus is Blue)
+        const busGeom = await fetchAccurateRoadGeometry(originCoord, destCoord, 'driving');
+        segmentsToRender.push({
+          mode: 'bus',
+          name: buses[0]?.name || 'Direct Bus',
+          color: MODE_COLORS.bus.stroke, // Blue
+          isDotted: false,
+          pillText: `${buses[0]?.stops_on_journey ? Math.round(buses[0].stops_on_journey * 2.5) : 25} min`,
+          pillIcon: '🚌',
+          coords: busGeom,
+          buses: buses,
+          fare: buses[0]?.fare_bdt || 25,
+          time: 25,
+          from: fromLocation,
+          to: toLocation,
+          instructions: `Board ${buses.slice(0, 3).map(b => b.name_bn || b.name).join(' or ')} directly to ${toLocation}.`,
+        });
       }
 
       if (isCancelled) return;

@@ -847,8 +847,128 @@ export function generateTransferRoutes(from, to, busList = []) {
   return itineraries;
 }
 
+export const MRT_LINE_6_STATIONS_DATA = [
+  { index: 0, name: 'Uttara North (Diabari)', name_bn: 'উত্তরা উত্তর (দিয়াবাড়ী)', shortName: 'Uttara North', aliases: ['uttara north', 'diabari', 'diyabari', 'uttara sector 18', 'sector 18', 'uttara diabari', 'uttara'], coords: [23.8780, 90.3720] },
+  { index: 1, name: 'Uttara Center', name_bn: 'উত্তরা সেন্টার', shortName: 'Uttara Center', aliases: ['uttara center', 'uttara centre', 'uttara sector 17', 'uttara sector 16'], coords: [23.8650, 90.3700] },
+  { index: 2, name: 'Uttara South', name_bn: 'উত্তরা দক্ষিণ', shortName: 'Uttara South', aliases: ['uttara south', 'uttara sector 15', 'uttara sector 14', 'uttara 3rd phase'], coords: [23.8500, 90.3680] },
+  { index: 3, name: 'Pallabi', name_bn: 'পল্লবী', shortName: 'Pallabi', aliases: ['pallabi', 'mirpur 12', 'mirpur-12', 'purobi', 'mirpur ceramic'], coords: [23.8250, 90.3640] },
+  { index: 4, name: 'Mirpur 11', name_bn: 'মিরপুর ১১', shortName: 'Mirpur 11', aliases: ['mirpur 11', 'mirpur-11'], coords: [23.8180, 90.3660] },
+  { index: 5, name: 'Mirpur 10', name_bn: 'মিরপুর ১০', shortName: 'Mirpur 10', aliases: ['mirpur 10', 'mirpur-10', 'mirpur 10 golchottor', 'mirpur 10 circle', 'mirpur 1', 'mirpur 2', 'senpara'], coords: [23.8069, 90.3687] },
+  { index: 6, name: 'Kazipara', name_bn: 'কাজীপাড়া', shortName: 'Kazipara', aliases: ['kazipara', 'kazi para', 'west kazipara'], coords: [23.7980, 90.3710] },
+  { index: 7, name: 'Shewrapara', name_bn: 'শেওড়াপাড়া', shortName: 'Shewrapara', aliases: ['shewrapara', 'sheorapara', 'west shewrapara'], coords: [23.7910, 90.3730] },
+  { index: 8, name: 'Agargaon', name_bn: 'আগারগাঁও', shortName: 'Agargaon', aliases: ['agargaon', 'idb', 'parjatan bhaban', 'passport office', 'sher-e-bangla nagar'], coords: [23.7780, 90.3800] },
+  { index: 9, name: 'Bijoy Sarani', name_bn: 'বিজয় সরণি', shortName: 'Bijoy Sarani', aliases: ['bijoy sarani', 'bijoy shoroni', 'military museum', 'rangs bhaban', 'jahangir gate'], coords: [23.7680, 90.3880] },
+  { index: 10, name: 'Farmgate', name_bn: 'ফার্মগেট', shortName: 'Farmgate', aliases: ['farmgate', 'farm gate', 'khamarbari', 'ananda cinema', 'green road', 'tejgaon'], coords: [23.7570, 90.3888] },
+  { index: 11, name: 'Karwan Bazar', name_bn: 'কারওয়ান বাজার', shortName: 'Karwan Bazar', aliases: ['karwan bazar', 'kawran bazar', 'panthapath', 'bashundhara city', 'banglamotor'], coords: [23.7516, 90.3934] },
+  { index: 12, name: 'Shahbagh', name_bn: 'শাহবাগ', shortName: 'Shahbagh', aliases: ['shahbagh', 'shahbag', 'bsmmu', 'pg hospital', 'national museum', 'kataban', 'science lab'], coords: [23.7383, 90.3957] },
+  { index: 13, name: 'Dhaka University', name_bn: 'ঢাকা বিশ্ববিদ্যালয়', shortName: 'Dhaka University', aliases: ['dhaka university', 'du', 'tsc', 'curzon hall', 'doel chattar', 'nilkhet'], coords: [23.7320, 90.3960] },
+  { index: 14, name: 'Bangladesh Secretariat', name_bn: 'বাংলাদেশ সচিবালয়', shortName: 'Secretariat', aliases: ['secretariat', 'bangladesh secretariat', 'press club', 'high court', 'paltan', 'purana paltan'], coords: [23.7290, 90.4080] },
+  { index: 15, name: 'Motijheel', name_bn: 'মতিঝিল', shortName: 'Motijheel', aliases: ['motijheel', 'motijheel c/a', 'dilkusha', 'shapla chattar', 'baitul mukarram', 'gulistan', 'gulisthan'], coords: [23.7330, 90.4172] }
+];
+
+export function checkMetroDirectRoute(from, to) {
+  if (!from || !to) return null;
+  const fLow = from.toLowerCase().trim();
+  const tLow = to.toLowerCase().trim();
+
+  let startSt = null;
+  let endSt = null;
+
+  for (const st of MRT_LINE_6_STATIONS_DATA) {
+    if (!startSt && (st.aliases.some(a => fLow === a || fLow.includes(a) || a.includes(fLow)))) {
+      startSt = st;
+    }
+    if (!endSt && (st.aliases.some(a => tLow === a || tLow.includes(a) || a.includes(tLow)))) {
+      endSt = st;
+    }
+  }
+
+  // Common area matches
+  if (!startSt) {
+    if (fLow.includes('mirpur 10') || fLow.includes('mirpur 1') || fLow.includes('mirpur 2')) startSt = MRT_LINE_6_STATIONS_DATA[5];
+    else if (fLow.includes('mirpur 11')) startSt = MRT_LINE_6_STATIONS_DATA[4];
+    else if (fLow.includes('mirpur 12') || fLow.includes('pallabi')) startSt = MRT_LINE_6_STATIONS_DATA[3];
+    else if (fLow.includes('uttara') || fLow.includes('diabari')) startSt = MRT_LINE_6_STATIONS_DATA[0];
+    else if (fLow.includes('farmgate')) startSt = MRT_LINE_6_STATIONS_DATA[10];
+    else if (fLow.includes('motijheel') || fLow.includes('gulistan') || fLow.includes('dilkusha')) startSt = MRT_LINE_6_STATIONS_DATA[15];
+  }
+
+  if (!endSt) {
+    if (tLow.includes('motijheel') || tLow.includes('gulistan') || tLow.includes('dilkusha')) endSt = MRT_LINE_6_STATIONS_DATA[15];
+    else if (tLow.includes('mirpur 10') || tLow.includes('mirpur 1') || tLow.includes('mirpur 2')) endSt = MRT_LINE_6_STATIONS_DATA[5];
+    else if (tLow.includes('mirpur 11')) endSt = MRT_LINE_6_STATIONS_DATA[4];
+    else if (tLow.includes('mirpur 12') || tLow.includes('pallabi')) endSt = MRT_LINE_6_STATIONS_DATA[3];
+    else if (tLow.includes('uttara') || tLow.includes('diabari')) endSt = MRT_LINE_6_STATIONS_DATA[0];
+    else if (tLow.includes('farmgate')) endSt = MRT_LINE_6_STATIONS_DATA[10];
+  }
+
+  if (startSt && endSt && startSt.index !== endSt.index) {
+    const isForward = startSt.index < endSt.index;
+    const minI = Math.min(startSt.index, endSt.index);
+    const maxI = Math.max(startSt.index, endSt.index);
+    const stationHops = maxI - minI;
+    const stationsTraversed = isForward
+      ? MRT_LINE_6_STATIONS_DATA.slice(minI, maxI + 1)
+      : [...MRT_LINE_6_STATIONS_DATA.slice(minI, maxI + 1)].reverse();
+
+    const travelTimeMin = Math.max(6, Math.round(stationHops * 2.3 + 2));
+    const fareBdt = Math.min(100, Math.max(20, 20 + Math.round((stationHops - 1) * 3)));
+    const busTimeMin = Math.round(travelTimeMin * 2.6 + 10);
+
+    return {
+      id: 'metro-mrt-6-direct',
+      type: 'metro_multimodal',
+      is_metro_direct: true,
+      is_shortest_way: true,
+      title: 'Dhaka Metro Rail (MRT Line 6)',
+      title_bn: 'ঢাকা মেট্রোরেল (এমআরটি লাইন ৬)',
+      tag: '⚡ Shortest & Fastest Route · 100% Jam-Free',
+      recommended: true,
+      total_est_time_min: travelTimeMin,
+      total_est_fare_bdt: fareBdt,
+      time_saved_min: Math.max(15, busTimeMin - travelTimeMin),
+      road_bus_time_min: busTimeMin,
+      frequency_min: 5,
+      from_station: startSt.shortName,
+      to_station: endSt.shortName,
+      modes: ['walk', 'metro'],
+      summary: `Take Dhaka Metro Rail (MRT-6) directly from ${startSt.shortName} to ${endSt.shortName}. Travel time is only ~${travelTimeMin} minutes (saves ${busTimeMin - travelTimeMin} mins over road buses in traffic)! 100% traffic-jam free air-conditioned ride.`,
+      stations_count: stationsTraversed.length,
+      station_names: stationsTraversed.map(s => s.shortName),
+      legs: [
+        {
+          step_num: 1,
+          mode: 'walk',
+          mode_label: 'Walk to Station',
+          mode_icon: '🚶',
+          from: from,
+          to: `${startSt.shortName} Metro Station`,
+          instructions: `Walk ~2-4 minutes from ${from} to ${startSt.shortName} Metro Station concourse.`,
+          est_time_min: 3,
+          est_fare_bdt: 0
+        },
+        {
+          step_num: 2,
+          mode: 'metro',
+          mode_label: 'Dhaka Metro Rail (MRT Line 6)',
+          mode_icon: '🚇',
+          from: `${startSt.shortName} Metro Station`,
+          to: `${endSt.shortName} Metro Station`,
+          metro_line: 'MRT Line 6 (Elevated High-Speed Electric Train)',
+          stations: stationsTraversed.map(s => s.name),
+          instructions: `Board the elevated Metro Rail train heading to ${endSt.shortName}. Rapid, smooth air-conditioned transit with trains every 5-8 minutes.`,
+          est_time_min: travelTimeMin,
+          est_fare_bdt: fareBdt
+        }
+      ]
+    };
+  }
+  return null;
+}
+
 /**
- * Finds all authentic direct buses between two points in Greater Dhaka.
+ * Finds all authentic direct buses and Metro Rail options between two points in Greater Dhaka.
+ * Always detects and highlights the shortest way path.
  */
 export function findBusesBetween(from, to) {
   if (!from || !to) {
@@ -918,21 +1038,128 @@ export function findBusesBetween(from, to) {
 
   directMatches.sort((a, b) => b.priorityScore - a.priorityScore || a.stops_on_journey - b.stops_on_journey);
 
+  // Check if Dhaka Metro Rail (MRT Line 6) is available
+  const metroDirect = checkMetroDirectRoute(from, to);
+
+  // Build direct road bus itinerary for map comparison
+  let directBusItinerary = null;
   if (directMatches.length > 0) {
+    const topBus = directMatches[0];
+    const busTime = topBus.stops_on_journey ? Math.round(topBus.stops_on_journey * 3.6 + 12) : 55;
+    directBusItinerary = {
+      id: 'direct-road-bus',
+      type: 'direct_bus',
+      title: `Direct Road Bus (${directMatches.slice(0, 3).map(b => b.name).join(', ')})`,
+      title_bn: `সরাসরি বাস (${directMatches.slice(0, 2).map(b => b.name_bn || b.name).join(', ')})`,
+      tag: 'Regular Road Bus Service',
+      recommended: !metroDirect,
+      total_est_time_min: busTime,
+      total_est_fare_bdt: topBus.fare_bdt || 35,
+      modes: ['walk', 'bus'],
+      summary: `Board ${directMatches.slice(0, 3).map(b => b.name).join(' or ')} directly from ${from} to ${to}. Est. travel time ~${busTime} mins.`,
+      buses: directMatches,
+      legs: [
+        {
+          step_num: 1,
+          mode: 'walk',
+          mode_label: 'Walk to Bus Stoppage',
+          mode_icon: '🚶',
+          from: from,
+          to: `${directMatches[0]?.from_stop || from} Bus Stop`,
+          instructions: `Walk 2-3 mins to ${directMatches[0]?.from_stop || from} bus counter.`,
+          est_time_min: 3,
+          est_fare_bdt: 0
+        },
+        {
+          step_num: 2,
+          mode: 'bus',
+          mode_label: `Direct Bus (${from} → ${to})`,
+          mode_icon: '🚌',
+          from: from,
+          to: to,
+          buses: directMatches,
+          instructions: `Board ${directMatches.slice(0, 4).map(b => `${b.name} (${b.name_bn || b.name})`).join(' or ')} directly to ${to}.`,
+          est_time_min: busTime,
+          est_fare_bdt: topBus.fare_bdt || 35
+        }
+      ]
+    };
+  }
+
+  // ── Scenario A: Direct Metro Available (Shortest Way Path) ──
+  if (metroDirect) {
+    const itineraries = [metroDirect];
+    if (directBusItinerary) {
+      itineraries.push(directBusItinerary);
+    }
+
     return {
       available: true,
+      has_direct_bus: directMatches.length > 0,
+      metro_available: true,
+      metro_suggestion: metroDirect,
+      shortest_way: {
+        mode: 'metro',
+        title: metroDirect.title,
+        title_bn: metroDirect.title_bn,
+        est_time_min: metroDirect.total_est_time_min,
+        fare_bdt: metroDirect.total_est_fare_bdt,
+        time_saved_min: metroDirect.time_saved_min,
+        reason: 'Dhaka Metro Rail (MRT-6) is the shortest and fastest way path. Bypasses 100% traffic congestion.'
+      },
       count: directMatches.length,
       from,
       to,
       buses: directMatches,
-      transfer_routes: [],
+      transfer_routes: itineraries,
+      message: `⚡ Shortest Way: Dhaka Metro Rail (MRT Line 6) is available! Travel in ~${metroDirect.total_est_time_min} mins (saves ${metroDirect.time_saved_min} mins vs road buses).`
+    };
+  }
+
+  // ── Scenario B: Direct Buses Found (No Direct Metro) ──
+  if (directMatches.length > 0) {
+    const transferRoutes = generateTransferRoutes(from, to, list);
+    const combinedItineraries = [directBusItinerary];
+
+    // If an alternative multimodal metro transfer exists, append it
+    const metroTransfer = transferRoutes.find(r => r.type === 'metro_multimodal');
+    if (metroTransfer) {
+      combinedItineraries.push(metroTransfer);
+    }
+
+    const shortestRoute = (metroTransfer && metroTransfer.total_est_time_min < directBusItinerary.total_est_time_min)
+      ? { mode: 'metro', title: metroTransfer.title, est_time_min: metroTransfer.total_est_time_min, fare_bdt: metroTransfer.total_est_fare_bdt, reason: 'Metro transfer is faster than direct bus in traffic.' }
+      : { mode: 'bus', title: directBusItinerary.title, est_time_min: directBusItinerary.total_est_time_min, fare_bdt: directBusItinerary.total_est_fare_bdt, reason: 'Direct bus provides single-ride connection.' };
+
+    return {
+      available: true,
+      has_direct_bus: true,
+      metro_available: Boolean(metroTransfer),
+      shortest_way: shortestRoute,
+      count: directMatches.length,
+      from,
+      to,
+      buses: directMatches,
+      transfer_routes: combinedItineraries,
       message: `Found ${directMatches.length} authentic direct bus service${directMatches.length > 1 ? 's' : ''} connecting ${from} and ${to}.`
     };
   }
 
-  // No direct bus found. Formulate authentic Dhaka transit hub transfer guidance and multi-modal itineraries.
+  // ── Scenario C: No Direct Bus -> Multi-modal Connecting Route ──
   const transferRoutes = generateTransferRoutes(from, to, list);
   const primaryTransfer = transferRoutes[0] || null;
+
+  let shortestWay = null;
+  if (transferRoutes.length > 0) {
+    const sorted = [...transferRoutes].sort((a, b) => a.total_est_time_min - b.total_est_time_min);
+    shortestWay = {
+      mode: sorted[0].type === 'metro_multimodal' ? 'metro' : 'bus',
+      title: sorted[0].title,
+      est_time_min: sorted[0].total_est_time_min,
+      fare_bdt: sorted[0].total_est_fare_bdt,
+      reason: 'Shortest connecting transit route.'
+    };
+  }
 
   let hubSuggestion = 'Abdullahpur, Gabtoli Terminal, or Farmgate';
   const fLow = from.toLowerCase();
@@ -951,6 +1178,9 @@ export function findBusesBetween(from, to) {
 
   return {
     available: false,
+    has_direct_bus: false,
+    metro_available: transferRoutes.some(r => r.type === 'metro_multimodal'),
+    shortest_way: shortestWay,
     count: 0,
     from,
     to,
