@@ -746,14 +746,16 @@ export function generateTransferRoutes(from, to, busList = []) {
   if (itineraries.length === 0) {
     // Pick the most logical hub based on destination or origin
     let bestHub = 'Abdullahpur';
-    if (tLow.includes('airport') || tLow.includes('uttara') || tLow.includes('gazipur')) {
+    if (tLow.includes('airport') || tLow.includes('uttara') || tLow.includes('gazipur') || tLow.includes('ashulia') || tLow.includes('tongi') || tLow.includes('diabari') || tLow.includes('daffodil') || tLow.includes('khagan') || tLow.includes('baipail')) {
       bestHub = 'Abdullahpur';
-    } else if (tLow.includes('motijheel') || tLow.includes('gulistan') || tLow.includes('sayedabad')) {
+    } else if (tLow.includes('motijheel') || tLow.includes('gulistan') || tLow.includes('sayedabad') || tLow.includes('paltan') || tLow.includes('shahbagh') || tLow.includes('dhaka university')) {
       bestHub = 'Farmgate';
-    } else if (tLow.includes('mirpur') || tLow.includes('savar') || tLow.includes('gabtoli')) {
+    } else if (tLow.includes('mirpur') || tLow.includes('savar') || tLow.includes('gabtoli') || tLow.includes('aminbazar') || tLow.includes('hemayetpur')) {
       bestHub = 'Mirpur 10';
+    } else if (tLow.includes('badda') || tLow.includes('rampura') || tLow.includes('kuril') || tLow.includes('notun bazar')) {
+      bestHub = 'Kuril';
     } else {
-      bestHub = 'Mohakhali';
+      bestHub = fLow.includes('uttara') || fLow.includes('airport') ? 'Abdullahpur' : 'Mohakhali';
     }
 
     const hubDefaultBuses = {
