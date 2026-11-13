@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { ALL_DHAKA_LOCATIONS } from '../utils/journeyPredictor.js';
-import IsometricTransitMap from './IsometricTransitMap.jsx';
+import OSMTransitMap from './OSMTransitMap.jsx';
 
 export default function DhakaBusDirectory() {
   const [buses, setBuses] = useState([]);
@@ -412,8 +412,8 @@ export default function DhakaBusDirectory() {
                     </div>
                   </div>
 
-                  {/* Isometric Multi-Modal Transit Map when No Direct Bus is Available */}
-                  <IsometricTransitMap
+                  {/* OpenStreetMap Transit Map when No Direct Bus is Available */}
+                  <OSMTransitMap
                     busTransit={routeResult}
                     fromLocation={fromLoc}
                     toLocation={toLoc}
