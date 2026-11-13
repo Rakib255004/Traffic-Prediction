@@ -250,6 +250,30 @@ function RouteRecordsList({ routes }) {
 }
 
 export default function TrafficInsights() {
+  const CORRIDOR_PRESETS = {
+    STANDARD: {
+      id: 'STANDARD',
+      label: 'Standard (≥30 / 10–29 / <10)',
+      heavy: 30,
+      moderate: 10,
+      desc: 'Heavy ≥30 corridors (≥60%), Moderate 10–29, Light <10',
+    },
+    BALANCED: {
+      id: 'BALANCED',
+      label: 'Balanced (≥25 / 8–24 / <8)',
+      heavy: 25,
+      moderate: 8,
+      desc: 'Heavy ≥25 corridors (≥50%), Moderate 8–24, Light <8',
+    },
+    SENSITIVE: {
+      id: 'SENSITIVE',
+      label: 'Sensitive (≥15 / 5–14 / <5)',
+      heavy: 15,
+      moderate: 5,
+      desc: 'Heavy ≥15 corridors (≥30%), Moderate 5–14, Light <5',
+    },
+  };
+
   const [records, setRecords]           = useState([]);
   const [loading, setLoading]           = useState(true);
   const [isSyncing, setIsSyncing]       = useState(false);
@@ -260,6 +284,7 @@ export default function TrafficInsights() {
   const [totalRecords, setTotalRecords] = useState(0);
   const [isOffline, setIsOffline]       = useState(false);
   const [peakSortMode, setPeakSortMode] = useState('volume'); // 'volume' | 'severity'
+  const [corridorThresholdPreset, setCorridorThresholdPreset] = useState('STANDARD');
 
   const loadData = async (isInitial = false) => {
     if (isInitial) {
@@ -683,17 +708,48 @@ export default function TrafficInsights() {
             </div>
             <p className="text-xs text-slate-400 mt-0.5">Number of congested observations (Slow + Jam) per hour across Dhaka (Hour 1 to 24)</p>
           </div>
-          <div className="flex flex-wrap items-center gap-4 text-xs text-slate-500">
-            <div className="flex items-center gap-3">
-              <span className="flex items-center gap-1.5"><span className="w-3 h-2 rounded bg-red-500 inline-block" /> Heavy Congestion (≥15 corridors)</span>
-              <span className="flex items-center gap-1.5"><span className="w-3 h-2 rounded bg-amber-500 inline-block" /> Moderate Congestion (5–14)</span>
-              <span className="flex items-center gap-1.5"><span className="w-3 h-2 rounded bg-blue-500 inline-block" /> Light Flow (&lt;5)</span>
+
+          <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500">
+            {/* Corridor Threshold Preset Switcher */}
+            <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-lg border border-slate-200">
+              <span className="text-[10px] font-bold text-slate-400 pl-1.5 pr-0.5 uppercase tracking-wide">
+                Req:
+              </span>
+              {Object.values(CORRIDOR_PRESETS).map(preset => (
+                <button
+                  key={preset.id}
+                  type="button"
+                  onClick={() => setCorridorThresholdPreset(preset.id)}
+                  className={`px-2 py-0.5 text-xs font-semibold rounded-md transition cursor-pointer ${
+                    corridorThresholdPreset === preset.id
+                      ? 'bg-white text-blue-700 shadow-2xs font-bold'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                  title={preset.desc}
+                >
+                  {preset.id === 'STANDARD' ? 'Standard (30/10)' : preset.id === 'BALANCED' ? 'Balanced (25/8)' : 'Sensitive (15/5)'}
+                </button>
+              ))}
             </div>
+
+            {/* Dynamic Legend based on active corridor requirement */}
+            <div className="flex items-center gap-3 font-medium text-slate-700">
+              <span className="flex items-center gap-1.5">
+                <span className="w-3 h-2 rounded bg-red-500 inline-block" /> Heavy (≥{CORRIDOR_PRESETS[corridorThresholdPreset]?.heavy || 30} corridors)
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="w-3 h-2 rounded bg-amber-500 inline-block" /> Moderate ({CORRIDOR_PRESETS[corridorThresholdPreset]?.moderate || 10}–{(CORRIDOR_PRESETS[corridorThresholdPreset]?.heavy || 30) - 1})
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="w-3 h-2 rounded bg-blue-500 inline-block" /> Light (&lt;{CORRIDOR_PRESETS[corridorThresholdPreset]?.moderate || 10})
+              </span>
+            </div>
+
             <button
               type="button"
               onClick={() => loadData(false)}
               disabled={isSyncing}
-              className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 active:bg-slate-300 rounded-lg transition disabled:opacity-60"
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 active:bg-slate-300 rounded-lg transition disabled:opacity-60 cursor-pointer"
               title="Refresh this chart with latest data"
             >
               <svg
@@ -713,9 +769,27 @@ export default function TrafficInsights() {
           {stats.hourData.map(d => {
             const maxVal = Math.max(...stats.hourData.map(h => h.value), 1);
             const height = d.value > 0 ? Math.max((d.value / maxVal) * 100, 5) : 0;
-            const barColor = d.value >= 15 || d.jams >= 4 ? 'bg-red-500' :
-                             d.value >= 5 ? 'bg-amber-500' :
-                             d.value > 0 ? 'bg-blue-500' : 'bg-slate-200';
+            const avgCorridors = Number(((d.pct / 100) * 50).toFixed(1));
+            const activePreset = CORRIDOR_PRESETS[corridorThresholdPreset] || CORRIDOR_PRESETS.STANDARD;
+
+            let barColor = 'bg-slate-200';
+            let statusText = 'Light Flow';
+            let statusColor = 'text-blue-400';
+
+            if (avgCorridors >= activePreset.heavy) {
+              barColor = 'bg-red-500';
+              statusText = 'Heavy Congestion';
+              statusColor = 'text-red-400';
+            } else if (avgCorridors >= activePreset.moderate) {
+              barColor = 'bg-amber-500';
+              statusText = 'Moderate Congestion';
+              statusColor = 'text-amber-400';
+            } else if (d.total > 0) {
+              barColor = 'bg-blue-500';
+              statusText = 'Light Flow';
+              statusColor = 'text-blue-400';
+            }
+
             return (
               <div key={d.label} className="flex-1 h-full flex flex-col justify-end items-center gap-1.5 group relative">
                 {/* Column background track + filled bar */}
@@ -730,8 +804,11 @@ export default function TrafficInsights() {
                   {d.hour}
                 </span>
                 {/* Hover Tooltip */}
-                <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-slate-900 text-white text-[11px] font-medium rounded-lg px-2.5 py-1.5 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-20 shadow-lg border border-slate-700">
+                <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-slate-900 text-white text-[11px] font-medium rounded-lg px-2.5 py-1.5 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-20 shadow-lg border border-slate-700 space-y-0.5">
                   <div className="font-bold text-slate-200">{d.label} · {d.period}</div>
+                  <div className={`font-bold ${statusColor}`}>
+                    ● {statusText} (~{avgCorridors} of 50 corridors)
+                  </div>
                   <div className="text-slate-300">{d.value.toLocaleString()} congested / {d.total.toLocaleString()} total</div>
                   <div className="text-slate-300">Avg Speed: {d.avgSpeed} km/h · Delay: +{d.avgDelay} min</div>
                   <div className="text-amber-400 font-semibold">{d.pct}% Congestion Rate</div>
