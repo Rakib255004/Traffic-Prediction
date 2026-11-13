@@ -160,7 +160,7 @@ export default function DhakaBusDirectory() {
             <form onSubmit={handleSearchRoute} className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
               {/* Origin */}
               <div className="sm:col-span-5">
-                <label className="block text-xs font-semibold text-slate-600 mb-1">
+                <label className="block text-xs font-bold text-slate-700 mb-1">
                   Initial Place (Start Point / কোথা থেকে)
                 </label>
                 <input
@@ -169,7 +169,8 @@ export default function DhakaBusDirectory() {
                   value={fromLoc}
                   onChange={(e) => setFromLoc(e.target.value)}
                   placeholder="e.g. Savar, Chandra, Gabtoli..."
-                  className="w-full px-3 py-2 text-sm rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 font-medium"
+                  className="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-300 bg-white text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 font-bold shadow-2xs"
+                  style={{ color: '#0f172a', backgroundColor: '#ffffff', colorScheme: 'light' }}
                 />
                 <datalist id="dhaka-origin-stops">
                   {ALL_DHAKA_LOCATIONS.map(loc => (
@@ -192,7 +193,7 @@ export default function DhakaBusDirectory() {
 
               {/* Destination */}
               <div className="sm:col-span-4">
-                <label className="block text-xs font-semibold text-slate-600 mb-1">
+                <label className="block text-xs font-bold text-slate-700 mb-1">
                   Destination (End Point / কোথায় যাবেন)
                 </label>
                 <input
@@ -201,7 +202,8 @@ export default function DhakaBusDirectory() {
                   value={toLoc}
                   onChange={(e) => setToLoc(e.target.value)}
                   placeholder="e.g. Mirpur 10, Farmgate, Motijheel..."
-                  className="w-full px-3 py-2 text-sm rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 font-medium"
+                  className="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-300 bg-white text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 font-bold shadow-2xs"
+                  style={{ color: '#0f172a', backgroundColor: '#ffffff', colorScheme: 'light' }}
                 />
                 <datalist id="dhaka-dest-stops">
                   {ALL_DHAKA_LOCATIONS.map(loc => (
@@ -478,7 +480,8 @@ export default function DhakaBusDirectory() {
               value={keyword}
               onChange={(e) => setKeyword(e.target.value)}
               placeholder="Search by bus name (e.g. ইতিহাস, রাজধানী, বৈশাখী, Welcome) or stoppage (Gabtoli, Savar)..."
-              className="w-full text-sm font-medium text-slate-800 focus:outline-none"
+              className="w-full text-sm font-bold text-slate-900 placeholder:text-slate-400 focus:outline-none bg-white"
+              style={{ color: '#0f172a', backgroundColor: '#ffffff', colorScheme: 'light' }}
             />
             {keyword && (
               <button
