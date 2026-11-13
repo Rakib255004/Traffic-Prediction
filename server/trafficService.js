@@ -1422,8 +1422,7 @@ export async function predictJourneyService({ date, day, time, from, to }) {
     },
     has_alternative: alternativeRoutes.length > 0,
     alternative_route: bestAlt,
-    alternative_routes: alternativeRoutes,
-    bus_transit: findBusesBetween(fTrim, tTrim)
+    alternative_routes: alternativeRoutes
   };
 
   journeyPredictionCache.set(cacheKey, { timestamp: Date.now(), data: finalResult });
