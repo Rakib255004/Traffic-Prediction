@@ -423,6 +423,76 @@ app.post('/api/measure-route', async (req, res) => {
   }
 });
 
+// 7b3. Real-Time Road Geometry Provider for Transit & Bus Map
+const ROUTE_GEOM_SERVER_CACHE = new Map();
+
+app.get('/api/route-geometry', async (req, res) => {
+  try {
+    const { fromLat, fromLng, toLat, toLng, mode = 'driving' } = req.query;
+    if (!fromLat || !fromLng || !toLat || !toLng) {
+      return res.status(400).json({ success: false, error: 'Missing coordinates' });
+    }
+
+    const p1 = [parseFloat(fromLat), parseFloat(fromLng)];
+    const p2 = [parseFloat(toLat), parseFloat(toLng)];
+    const profile = mode === 'walking' || mode === 'foot' ? 'foot' : 'driving';
+    const cacheKey = `${profile}_${p1[0].toFixed(4)},${p1[1].toFixed(4)}_${p2[0].toFixed(4)},${p2[1].toFixed(4)}`;
+
+    if (ROUTE_GEOM_SERVER_CACHE.has(cacheKey)) {
+      res.setHeader('Cache-Control', 'public, max-age=86400');
+      return res.json({ success: true, from_cache: true, coordinates: ROUTE_GEOM_SERVER_CACHE.get(cacheKey) });
+    }
+
+    let coords = null;
+
+    // 1. Try OSM Germany routed engine (faster, higher rate limits)
+    try {
+      const svc = profile === 'foot' ? 'routed-foot' : 'routed-car';
+      const profName = profile === 'foot' ? 'foot' : 'driving';
+      const url = `https://routing.openstreetmap.de/${svc}/route/v1/${profName}/${p1[1]},${p1[0]};${p2[1]},${p2[0]}?overview=full&geometries=geojson`;
+      const r = await fetch(url, { signal: AbortSignal.timeout(4000) });
+      if (r.ok) {
+        const j = await r.json();
+        if (j?.routes?.[0]?.geometry?.coordinates?.length >= 2) {
+          coords = j.routes[0].geometry.coordinates.map(([lon, lat]) => [lat, lon]);
+        }
+      }
+    } catch (_) {}
+
+    // 2. Try Project-OSRM public engine
+    if (!coords) {
+      try {
+        const url = `https://router.project-osrm.org/route/v1/${profile}/${p1[1]},${p1[0]};${p2[1]},${p2[0]}?overview=full&geometries=geojson`;
+        const r = await fetch(url, { signal: AbortSignal.timeout(4000) });
+        if (r.ok) {
+          const j = await r.json();
+          if (j?.routes?.[0]?.geometry?.coordinates?.length >= 2) {
+            coords = j.routes[0].geometry.coordinates.map(([lon, lat]) => [lat, lon]);
+          }
+        }
+      } catch (_) {}
+    }
+
+    // 3. Fallback to local Dhaka GeoJSON road graph A*
+    if (!coords) {
+      const osmRoute = buildOsmRouteGeometry([p1, p2]);
+      if (osmRoute.coordinates && osmRoute.coordinates.length >= 2) {
+        coords = [p1, ...osmRoute.coordinates, p2];
+      }
+    }
+
+    if (coords && coords.length >= 2) {
+      ROUTE_GEOM_SERVER_CACHE.set(cacheKey, coords);
+      res.setHeader('Cache-Control', 'public, max-age=86400');
+      return res.json({ success: true, coordinates: coords });
+    }
+
+    return res.status(500).json({ success: false, error: 'Could not resolve road geometry' });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // 7c. Live Weather from OpenWeatherMap API
 app.get('/api/weather', async (req, res) => {
   try {

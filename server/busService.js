@@ -686,7 +686,59 @@ export function generateTransferRoutes(from, to, busList = []) {
         ]
       });
 
-      if (itineraries.length >= 2) break;
+      if (hub.name === 'Mirpur 10' && (tLow.includes('abdullahpur') || tLow.includes('uttara') || tLow.includes('airport') || fLow.includes('aminbazar') || fLow.includes('gabtoli'))) {
+        itineraries.push({
+          id: 'transfer-metro-mrt6',
+          type: 'metro_multimodal',
+          title: 'Metro Rail (MRT Line 6) + Feeder Express',
+          title_bn: 'মেট্রোরেল (এমআরটি লাইন ৬) + ফিডার এক্সপ্রেস',
+          tag: 'Fastest · Bypass 100% Traffic',
+          recommended: false,
+          total_est_time_min: 52,
+          total_est_fare_bdt: 85,
+          modes: ['bus', 'metro', 'auto_rickshaw'],
+          summary: `Take 1st Bus from ${from} to Mirpur 10, ride Dhaka Metro Rail (MRT-6) to Uttara North (Diabari), then take local CNG or auto-rickshaw to ${to}.`,
+          legs: [
+            {
+              step_num: 1,
+              mode: 'bus',
+              mode_label: `1st Bus (${from} → Mirpur 10)`,
+              mode_icon: '🚌',
+              from: from,
+              to: 'Mirpur 10',
+              buses: uniqueLeg1,
+              instructions: `Board ${uniqueLeg1.map(b => `${b.name} (${b.name_bn || b.name})`).join(' or ')} from ${from} to Mirpur 10.`,
+              est_time_min: 30,
+              est_fare_bdt: 30
+            },
+            {
+              step_num: 2,
+              mode: 'metro',
+              mode_label: 'Dhaka Metro Rail (MRT Line 6)',
+              mode_icon: '🚇',
+              from: 'Mirpur 10 Metro Station',
+              to: 'Uttara North Metro Station (Diabari)',
+              instructions: 'Board elevated Metro Rail train north to Uttara North (Diabari). 100% traffic-jam free air-conditioned ride.',
+              est_time_min: 12,
+              est_fare_bdt: 40
+            },
+            {
+              step_num: 3,
+              mode: 'auto_rickshaw',
+              mode_label: `Local CNG / Rickshaw to ${to}`,
+              mode_icon: '🛺',
+              from: 'Uttara North Metro Station (Diabari)',
+              to: to,
+              local_transports: ['Local CNG Auto-rickshaw', 'Battery Auto-rickshaw (Easy-bike)', 'Cycle-Rickshaw'],
+              instructions: `Exit Uttara North station and take a local CNG or auto-rickshaw directly to ${to}.`,
+              est_time_min: 10,
+              est_fare_bdt: 15
+            }
+          ]
+        });
+      }
+
+      if (itineraries.length >= 3) break;
     }
   }
 
