@@ -445,12 +445,12 @@ app.get('/api/route-geometry', async (req, res) => {
 
     let coords = null;
 
-    // 1. Try OSM Germany routed engine (faster, higher rate limits)
+    // 1. Try OSM Germany routed engine with fast 1200ms timeout
     try {
       const svc = profile === 'foot' ? 'routed-foot' : 'routed-car';
       const profName = profile === 'foot' ? 'foot' : 'driving';
       const url = `https://routing.openstreetmap.de/${svc}/route/v1/${profName}/${p1[1]},${p1[0]};${p2[1]},${p2[0]}?overview=full&geometries=geojson`;
-      const r = await fetch(url, { signal: AbortSignal.timeout(4000) });
+      const r = await fetch(url, { signal: AbortSignal.timeout(1200) });
       if (r.ok) {
         const j = await r.json();
         if (j?.routes?.[0]?.geometry?.coordinates?.length >= 2) {
@@ -459,11 +459,11 @@ app.get('/api/route-geometry', async (req, res) => {
       }
     } catch (_) {}
 
-    // 2. Try Project-OSRM public engine
+    // 2. Try Project-OSRM public engine with fast 1200ms timeout
     if (!coords) {
       try {
         const url = `https://router.project-osrm.org/route/v1/${profile}/${p1[1]},${p1[0]};${p2[1]},${p2[0]}?overview=full&geometries=geojson`;
-        const r = await fetch(url, { signal: AbortSignal.timeout(4000) });
+        const r = await fetch(url, { signal: AbortSignal.timeout(1200) });
         if (r.ok) {
           const j = await r.json();
           if (j?.routes?.[0]?.geometry?.coordinates?.length >= 2) {
@@ -473,11 +473,11 @@ app.get('/api/route-geometry', async (req, res) => {
       } catch (_) {}
     }
 
-    // 3. Fallback to local Dhaka GeoJSON road graph A*
-    if (!coords) {
+    // 3. Guaranteed instant local Dhaka GeoJSON road graph A* (2,805 road segments)
+    if (!coords || coords.length < 2) {
       const osmRoute = buildOsmRouteGeometry([p1, p2]);
       if (osmRoute.coordinates && osmRoute.coordinates.length >= 2) {
-        coords = [p1, ...osmRoute.coordinates, p2];
+        coords = osmRoute.coordinates;
       }
     }
 

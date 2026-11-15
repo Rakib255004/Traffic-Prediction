@@ -159,19 +159,33 @@ export default function DhakaBusDirectory() {
 
             <form onSubmit={handleSearchRoute} className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
               {/* Origin */}
-              <div className="sm:col-span-5">
+              <div className="sm:col-span-5 relative">
                 <label className="block text-xs font-bold text-slate-700 mb-1">
                   Initial Place (Start Point / কোথা থেকে)
                 </label>
-                <input
-                  type="text"
-                  list="dhaka-origin-stops"
-                  value={fromLoc}
-                  onChange={(e) => setFromLoc(e.target.value)}
-                  placeholder="e.g. Savar, Chandra, Gabtoli..."
-                  className="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-300 bg-white text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 font-bold shadow-2xs"
-                  style={{ color: '#0f172a', backgroundColor: '#ffffff', colorScheme: 'light' }}
-                />
+                <div className="relative">
+                  <input
+                    type="text"
+                    list="dhaka-origin-stops"
+                    value={fromLoc}
+                    onChange={(e) => setFromLoc(e.target.value)}
+                    placeholder="e.g. Savar, Chandra, Gabtoli..."
+                    spellCheck="false"
+                    autoComplete="off"
+                    className="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-300 bg-white text-slate-900 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 font-bold shadow-2xs pr-8"
+                    style={{ color: '#0f172a', backgroundColor: '#ffffff', colorScheme: 'light', fontWeight: '700', fontSize: '15px' }}
+                  />
+                  {fromLoc && (
+                    <button
+                      type="button"
+                      onClick={() => setFromLoc('')}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-sm font-bold w-5 h-5 flex items-center justify-center rounded-full hover:bg-slate-100"
+                      title="Clear origin"
+                    >
+                      ×
+                    </button>
+                  )}
+                </div>
                 <datalist id="dhaka-origin-stops">
                   {ALL_DHAKA_LOCATIONS.map(loc => (
                     <option key={loc} value={loc} />
@@ -184,7 +198,7 @@ export default function DhakaBusDirectory() {
                 <button
                   type="button"
                   onClick={handleSwap}
-                  className="w-9 h-9 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 flex items-center justify-center transition-colors"
+                  className="w-9 h-9 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 flex items-center justify-center transition-colors shadow-2xs cursor-pointer font-bold text-base"
                   title="Swap Origin and Destination"
                 >
                   ⇄
@@ -192,19 +206,33 @@ export default function DhakaBusDirectory() {
               </div>
 
               {/* Destination */}
-              <div className="sm:col-span-4">
+              <div className="sm:col-span-4 relative">
                 <label className="block text-xs font-bold text-slate-700 mb-1">
                   Destination (End Point / কোথায় যাবেন)
                 </label>
-                <input
-                  type="text"
-                  list="dhaka-dest-stops"
-                  value={toLoc}
-                  onChange={(e) => setToLoc(e.target.value)}
-                  placeholder="e.g. Mirpur 10, Farmgate, Motijheel..."
-                  className="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-300 bg-white text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 font-bold shadow-2xs"
-                  style={{ color: '#0f172a', backgroundColor: '#ffffff', colorScheme: 'light' }}
-                />
+                <div className="relative">
+                  <input
+                    type="text"
+                    list="dhaka-dest-stops"
+                    value={toLoc}
+                    onChange={(e) => setToLoc(e.target.value)}
+                    placeholder="e.g. Mirpur 10, Farmgate, Motijheel..."
+                    spellCheck="false"
+                    autoComplete="off"
+                    className="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-300 bg-white text-slate-900 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 font-bold shadow-2xs pr-8"
+                    style={{ color: '#0f172a', backgroundColor: '#ffffff', colorScheme: 'light', fontWeight: '700', fontSize: '15px' }}
+                  />
+                  {toLoc && (
+                    <button
+                      type="button"
+                      onClick={() => setToLoc('')}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-sm font-bold w-5 h-5 flex items-center justify-center rounded-full hover:bg-slate-100"
+                      title="Clear destination"
+                    >
+                      ×
+                    </button>
+                  )}
+                </div>
                 <datalist id="dhaka-dest-stops">
                   {ALL_DHAKA_LOCATIONS.map(loc => (
                     <option key={loc} value={loc} />
@@ -480,8 +508,10 @@ export default function DhakaBusDirectory() {
               value={keyword}
               onChange={(e) => setKeyword(e.target.value)}
               placeholder="Search by bus name (e.g. ইতিহাস, রাজধানী, বৈশাখী, Welcome) or stoppage (Gabtoli, Savar)..."
-              className="w-full text-sm font-bold text-slate-900 placeholder:text-slate-400 focus:outline-none bg-white"
-              style={{ color: '#0f172a', backgroundColor: '#ffffff', colorScheme: 'light' }}
+              spellCheck="false"
+              autoComplete="off"
+              className="w-full text-sm font-bold text-slate-900 placeholder:text-slate-500 focus:outline-none bg-white"
+              style={{ color: '#0f172a', backgroundColor: '#ffffff', colorScheme: 'light', fontWeight: '700', fontSize: '15px' }}
             />
             {keyword && (
               <button

@@ -39,6 +39,7 @@ function getMetroLineCoordinates(fromName, toName) {
     else if (fLow.includes('pallabi') || fLow.includes('mirpur 12')) startIdx = 3;
     else if (fLow.includes('farmgate')) startIdx = 10;
     else if (fLow.includes('uttara') || fLow.includes('diabari')) startIdx = 0;
+    else if (fLow.includes('motijheel') || fLow.includes('gulistan') || fLow.includes('babubazar') || fLow.includes('sadarghat')) startIdx = 15;
     else startIdx = 5;
   }
   if (endIdx === -1) {
@@ -222,6 +223,32 @@ const DHAKA_CORRIDORS = [
       [23.7980, 90.3710], // Kazipara
       [23.8069, 90.3687], // Mirpur 10
     ]
+  },
+  // 12. Sadarghat & Babubazar Bridge to Gulistan
+  {
+    id: 'sadarghat_babubazar_gulistan',
+    points: [
+      [23.7050, 90.4140], // Sadarghat
+      [23.7100, 90.4015], // Babubazar Bridge
+      [23.7140, 90.4060], // Nayabazar / Ray Saheb Bazar
+      [23.7200, 90.4100], // Chankhar Pul
+      [23.7250, 90.4125], // Gulistan
+    ]
+  },
+  // 13. Mohakhali to Gulistan via VIP Road
+  {
+    id: 'mohakhali_gulistan_vip',
+    points: [
+      [23.7776, 90.4054], // Mohakhali
+      [23.7680, 90.3950], // Jahangir Gate
+      [23.7680, 90.3880], // Bijoy Sarani
+      [23.7570, 90.3888], // Farmgate
+      [23.7516, 90.3934], // Karwan Bazar
+      [23.7450, 90.3945], // Banglamotor
+      [23.7383, 90.3957], // Shahbagh
+      [23.7280, 90.4110], // Paltan
+      [23.7250, 90.4125], // Gulistan
+    ]
   }
 ];
 
@@ -231,8 +258,9 @@ function getApproxDistanceKm(p1, p2) {
   return Math.hypot(dLat, dLng);
 }
 
-// ── Guaranteed Road Corridor Snap (No Straight Lines, Never Cuts Across Buildings) ──
+// ── Guaranteed Road Corridor Snap (Connected Arterial Graph, Never Cuts Across Buildings) ──
 function getCorridorFallbackRoad(p1, p2) {
+  // Priority 1: Check if both points lie along the same corridor
   for (const c of DHAKA_CORRIDORS) {
     let bestStartIdx = -1;
     let bestEndIdx = -1;
@@ -255,24 +283,71 @@ function getCorridorFallbackRoad(p1, p2) {
     }
   }
 
-  // Multi-corridor bridge: Connect via nearest arterial junction points
-  let closestC1Pt = null;
-  let closestC2Pt = null;
-  let minD1 = Infinity;
-  let minD2 = Infinity;
+  // Priority 2: Multi-corridor route through connected Dhaka arterial network
+  const graphNodes = [];
+  const graphAdj = new Map();
 
   DHAKA_CORRIDORS.forEach(c => {
-    c.points.forEach(pt => {
-      const d1 = getApproxDistanceKm(p1, pt);
-      const d2 = getApproxDistanceKm(p2, pt);
-      if (d1 < minD1) { minD1 = d1; closestC1Pt = pt; }
-      if (d2 < minD2) { minD2 = d2; closestC2Pt = pt; }
-    });
+    const pts = c.points;
+    for (let i = 0; i < pts.length; i++) {
+      const p = pts[i];
+      let nIdx = graphNodes.findIndex(n => getApproxDistanceKm(n, p) < 0.35);
+      if (nIdx === -1) {
+        nIdx = graphNodes.length;
+        graphNodes.push(p);
+        graphAdj.set(nIdx, []);
+      }
+      if (i > 0) {
+        const prevP = pts[i - 1];
+        const prevIdx = graphNodes.findIndex(n => getApproxDistanceKm(n, prevP) < 0.35);
+        if (prevIdx !== -1 && prevIdx !== nIdx) {
+          const d = getApproxDistanceKm(graphNodes[prevIdx], graphNodes[nIdx]);
+          graphAdj.get(prevIdx).push({ to: nIdx, cost: d });
+          graphAdj.get(nIdx).push({ to: prevIdx, cost: d });
+        }
+      }
+    }
   });
 
-  if (closestC1Pt && closestC2Pt) {
-    return [p1, closestC1Pt, closestC2Pt, p2];
+  let sIdx = 0, eIdx = 0, minDs = Infinity, minDe = Infinity;
+  graphNodes.forEach((n, idx) => {
+    const ds = getApproxDistanceKm(p1, n);
+    const de = getApproxDistanceKm(p2, n);
+    if (ds < minDs) { minDs = ds; sIdx = idx; }
+    if (de < minDe) { minDe = de; eIdx = idx; }
+  });
+
+  const dist = new Map([[sIdx, 0]]);
+  const prev = new Map();
+  const pq = [[0, sIdx]];
+
+  while (pq.length > 0) {
+    pq.sort((a, b) => a[0] - b[0]);
+    const [d, u] = pq.shift();
+    if (u === eIdx) break;
+    const neighbors = graphAdj.get(u) || [];
+    for (const edge of neighbors) {
+      const alt = d + edge.cost;
+      if (!dist.has(edge.to) || alt < dist.get(edge.to)) {
+        dist.set(edge.to, alt);
+        prev.set(edge.to, u);
+        pq.push([alt, edge.to]);
+      }
+    }
   }
+
+  if (prev.has(eIdx) || sIdx === eIdx) {
+    const path = [];
+    let curr = eIdx;
+    while (prev.has(curr)) {
+      path.push(graphNodes[curr]);
+      curr = prev.get(curr);
+    }
+    path.push(graphNodes[sIdx]);
+    path.reverse();
+    return [p1, ...path, p2];
+  }
+
   return [p1, p2];
 }
 
@@ -985,7 +1060,7 @@ export default function OSMTransitMap({ busTransit, fromLocation, toLocation }) 
           L.polyline(seg.coords, {
             color: '#78350f', // Dark amber contrast casing
             weight: 9,
-            opacity: 0.45,
+            opacity: 0.6,
             lineCap: 'round',
             lineJoin: 'round',
           }).addTo(group);
@@ -994,23 +1069,16 @@ export default function OSMTransitMap({ busTransit, fromLocation, toLocation }) 
         // Multi-point polyline following every road curve and corner
         const poly = L.polyline(seg.coords, {
           color: seg.color,
-          weight: seg.isDotted ? 6 : (seg.isMetro ? 8 : 7),
+          weight: seg.isDotted ? 5 : (seg.isMetro ? 8 : 7),
           opacity: 1.0,
-          dashArray: seg.isDotted ? '2, 9' : undefined,
+          dashArray: seg.isDotted ? '4, 8' : undefined,
           lineCap: 'round',
           lineJoin: 'round',
         }).addTo(group);
 
-        // Position pill at optimal point along the road segment
-        const pillIdx = seg.isDotted
-          ? Math.min(seg.coords.length - 1, Math.max(1, Math.floor(seg.coords.length * 0.65)))
-          : Math.floor(seg.coords.length / 2);
-        const pillCoord = seg.coords[pillIdx];
-
-        // Detailed HTML Hover Tooltip
+        // Detailed HTML Hover Tooltip (Hovering anywhere on any road line shows rich card)
         const detailedHtml = createDetailedTooltipHtml(seg);
 
-        // Polyline Sticky Hover Tooltip (Hovering anywhere on the road line shows the rich card)
         poly.bindTooltip(detailedHtml, {
           sticky: true,
           direction: 'top',
@@ -1019,25 +1087,30 @@ export default function OSMTransitMap({ busTransit, fromLocation, toLocation }) 
           opacity: 1,
         });
 
-        // Floating Pill Marker
-        const pillMarker = L.marker(pillCoord, {
-          icon: createPillIcon(seg.pillText, seg.pillIcon, seg.color),
-          zIndexOffset: 800,
-        }).addTo(group);
+        // Floating Pill Marker for Transit Segments (Excluded from walk to eliminate Start Pin collision)
+        if (!seg.isDotted) {
+          const pillIdx = Math.floor(seg.coords.length / 2);
+          const pillCoord = seg.coords[pillIdx];
 
-        pillMarker.bindTooltip(detailedHtml, {
-          direction: 'top',
-          offset: [0, -22],
-          className: 'rich-transit-tooltip',
-          opacity: 1,
-        });
+          const pillMarker = L.marker(pillCoord, {
+            icon: createPillIcon(seg.pillText, seg.pillIcon, seg.color),
+            zIndexOffset: 800,
+          }).addTo(group);
+
+          pillMarker.bindTooltip(detailedHtml, {
+            direction: 'top',
+            offset: [0, -22],
+            className: 'rich-transit-tooltip',
+            opacity: 1,
+          });
+        }
       });
 
       // ── 4. Add Start Pin & Finish Flag (Clearly Separated, Never Overlapped) ──
       L.marker(walkStartCoord, {
         icon: createStartPinIcon(fromLocation),
         zIndexOffset: 1000,
-      }).addTo(group).bindTooltip(`<b>Start Location:</b> ${fromLocation}<br/><span style="font-size:11px;color:#64748b;">Walk 10 mins to boarding stop</span>`, {
+      }).addTo(group).bindTooltip(`<b>Start Location:</b> ${fromLocation}<br/><span style="font-size:11px;color:#f59e0b;font-weight:700;">🚶 Walk ~650m to transit stoppage (Hover yellow line for details)</span>`, {
         direction: 'top',
         offset: [0, -42],
         className: 'rich-transit-tooltip'

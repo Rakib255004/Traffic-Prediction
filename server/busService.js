@@ -67,7 +67,7 @@ const STOP_ALIASES = {
   'mohammadpur': ['mohammadpur', 'shia mosque', 'town hall', 'japan garden city', 'shekhertek', 'মোহাম্মদপুর'],
   'postogola': ['postogola', 'buriganga bridge', 'পোস্তগোলা'],
   'sadarghat': ['sadarghat', 'victoria park', 'bahadur shah park', 'jagannath university', 'সদরঘাট'],
-  'babubazar bridge': ['babubazar bridge', 'babubazar', 'badamtoli', 'mitford', 'nayabazar', 'বাবুবাজার'],
+  'babubazar bridge': ['babubazar bridge', 'babubazar', 'badamtoli', 'mitford', 'nayabazar', 'ray saheb bazar', 'বাবুবাজার'],
   'ashulia': ['ashulia', 'ashulia bazar', 'beribadh', 'dhour', 'আশুলিয়া'],
   'keraniganj': ['keraniganj', 'ghatarchar', 'kadamtoli', 'কেরানীগঞ্জ'],
   'kanchpur': ['kanchpur', 'kanchpur bridge', 'কাঁচপুর'],
@@ -627,8 +627,70 @@ export function generateTransferRoutes(from, to, busList = []) {
     { name: 'Sayedabad', aliases: ['sayedabad'] }
   ];
 
+  // 1. Check if South Dhaka (Babubazar, Sadarghat, Nayabazar) to North Dhaka (Uttara, Ashulia, Mirpur) can take Metro MRT-6 via Motijheel
+  const isSouthOrigin = fLow.includes('babubazar') || fLow.includes('sadarghat') || fLow.includes('nayabazar') || fLow.includes('keraniganj');
+  const isMetroFeederDest = tLow.includes('ashulia') || tLow.includes('uttara') || tLow.includes('mirpur') || tLow.includes('pallabi') || tLow.includes('diabari');
+
+  if (isSouthOrigin && isMetroFeederDest) {
+    itineraries.push({
+      id: 'transfer-metro-south-to-north',
+      type: 'metro_multimodal',
+      title: 'Metro Rail (MRT Line 6) Rapid Transit (Fastest & Jam-Free)',
+      title_bn: 'মতিঝিল মেট্রোরেল (এমআরটি-৬) দ্রুততম ট্রানজিট',
+      tag: '⚡ Recommended · 100% Jam-Free',
+      recommended: true,
+      total_est_time_min: 48,
+      total_est_fare_bdt: 75,
+      modes: ['bus', 'metro', 'auto_rickshaw'],
+      summary: `Take 8-min feeder or rickshaw from ${from} to Motijheel / Secretariat Metro Station. Ride elevated Metro Rail (MRT-6) north to Uttara North (Diabari), then take local CNG or auto-rickshaw directly to ${to}.`,
+      legs: [
+        {
+          step_num: 1,
+          mode: 'bus',
+          mode_label: `Feeder Leg 1 (${from} → Motijheel Metro Station)`,
+          mode_icon: '🛺',
+          from: from,
+          to: 'Motijheel',
+          instructions: `Take a 5-8 min cycle rickshaw, auto-rickshaw or local bus from ${from} to Motijheel / Secretariat Metro Station concourse.`,
+          est_time_min: 8,
+          est_fare_bdt: 15
+        },
+        {
+          step_num: 2,
+          mode: 'metro',
+          mode_label: 'Dhaka Metro Rail (MRT Line 6)',
+          mode_icon: '🚇',
+          from: 'Motijheel',
+          to: 'Uttara North',
+          instructions: 'Board elevated Metro Rail train north to Uttara North (Diabari). 100% traffic-jam free air-conditioned ride in 28 minutes.',
+          est_time_min: 28,
+          est_fare_bdt: 50
+        },
+        {
+          step_num: 3,
+          mode: 'auto_rickshaw',
+          mode_label: `Local Connecting Feeder to ${to}`,
+          mode_icon: '🛺',
+          from: 'Uttara North',
+          to: to,
+          local_transports: ['Local CNG Auto-rickshaw', 'Battery Auto-rickshaw (Easy-bike)'],
+          instructions: `Exit Uttara North station and take local CNG or auto-rickshaw via Sonargaon Janapath / Beribadh directly to ${to}.`,
+          est_time_min: 12,
+          est_fare_bdt: 20
+        }
+      ]
+    });
+  }
+
+  const isNorthOrigin = fLow.includes('uttara') || fLow.includes('airport') || fLow.includes('abdullahpur') || fLow.includes('tongi') || fLow.includes('gazipur');
+  const isNorthDest = tLow.includes('ashulia') || tLow.includes('baipail') || tLow.includes('savar') || tLow.includes('diabari') || tLow.includes('kamarpara') || tLow.includes('dhour');
+
   for (const hub of MAJOR_HUBS) {
     if (fLow.includes(hub.name.toLowerCase()) || tLow.includes(hub.name.toLowerCase())) continue;
+    // Don't route south through Mohakhali, Farmgate, Motijheel when origin and destination are both northern neighbors
+    if (isNorthOrigin && isNorthDest && (hub.name === 'Mohakhali' || hub.name === 'Farmgate' || hub.name === 'Shahbagh' || hub.name === 'Motijheel' || hub.name === 'Sayedabad')) {
+      continue;
+    }
 
     const leg1Buses = getBusesConnecting(from, hub.name);
     const leg2Buses = getBusesConnecting(hub.name, to);

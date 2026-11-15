@@ -4,9 +4,10 @@
   "name_bn": "ওয়েলকাম পরিবহন",
   "route_code": "WLC-01",
   "type": "Semi-Seating",
-  "origin": "Nabinagar / Savar",
+  "origin": "Dhamrai / Savar",
   "destination": "Motijheel",
   "stoppages": [
+    "Dhamrai",
     "Nabinagar",
     "Savar Bus Stand",
     "Hemayetpur",
@@ -16,9 +17,10 @@
     "Kallyanpur",
     "Shyamoli",
     "Asadgate",
-    "Science Lab",
+    "Farmgate",
+    "Karwan Bazar",
+    "Banglamotor",
     "Shahbagh",
-    "Matsya Bhaban",
     "Press Club",
     "Paltan",
     "Gulisthan",
@@ -26,8 +28,7 @@
   ],
   "corridors_covered": [
     "R02",
-    "R27",
-    "R05"
+    "R27"
   ],
   "fare_min_bdt": 15,
   "fare_max_bdt": 55,
