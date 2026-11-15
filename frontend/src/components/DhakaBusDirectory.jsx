@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { ALL_DHAKA_LOCATIONS } from '../utils/journeyPredictor.js';
-import IsometricTransitMap from './IsometricTransitMap.jsx';
+import OSMTransitMap from './OSMTransitMap.jsx';
 
 export default function DhakaBusDirectory() {
   const [buses, setBuses] = useState([]);
@@ -159,18 +159,33 @@ export default function DhakaBusDirectory() {
 
             <form onSubmit={handleSearchRoute} className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
               {/* Origin */}
-              <div className="sm:col-span-5">
-                <label className="block text-xs font-semibold text-slate-600 mb-1">
+              <div className="sm:col-span-5 relative">
+                <label className="block text-xs font-bold text-slate-700 mb-1">
                   Initial Place (Start Point / কোথা থেকে)
                 </label>
-                <input
-                  type="text"
-                  list="dhaka-origin-stops"
-                  value={fromLoc}
-                  onChange={(e) => setFromLoc(e.target.value)}
-                  placeholder="e.g. Savar, Chandra, Gabtoli..."
-                  className="w-full px-3 py-2 text-sm rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 font-medium"
-                />
+                <div className="relative">
+                  <input
+                    type="text"
+                    list="dhaka-origin-stops"
+                    value={fromLoc}
+                    onChange={(e) => setFromLoc(e.target.value)}
+                    placeholder="e.g. Savar, Chandra, Gabtoli..."
+                    spellCheck="false"
+                    autoComplete="off"
+                    className="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-300 bg-white text-slate-900 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 font-bold shadow-2xs pr-8"
+                    style={{ color: '#0f172a', backgroundColor: '#ffffff', colorScheme: 'light', fontWeight: '700', fontSize: '15px' }}
+                  />
+                  {fromLoc && (
+                    <button
+                      type="button"
+                      onClick={() => setFromLoc('')}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-sm font-bold w-5 h-5 flex items-center justify-center rounded-full hover:bg-slate-100"
+                      title="Clear origin"
+                    >
+                      ×
+                    </button>
+                  )}
+                </div>
                 <datalist id="dhaka-origin-stops">
                   {ALL_DHAKA_LOCATIONS.map(loc => (
                     <option key={loc} value={loc} />
@@ -183,7 +198,7 @@ export default function DhakaBusDirectory() {
                 <button
                   type="button"
                   onClick={handleSwap}
-                  className="w-9 h-9 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 flex items-center justify-center transition-colors"
+                  className="w-9 h-9 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 flex items-center justify-center transition-colors shadow-2xs cursor-pointer font-bold text-base"
                   title="Swap Origin and Destination"
                 >
                   ⇄
@@ -191,18 +206,33 @@ export default function DhakaBusDirectory() {
               </div>
 
               {/* Destination */}
-              <div className="sm:col-span-4">
-                <label className="block text-xs font-semibold text-slate-600 mb-1">
+              <div className="sm:col-span-4 relative">
+                <label className="block text-xs font-bold text-slate-700 mb-1">
                   Destination (End Point / কোথায় যাবেন)
                 </label>
-                <input
-                  type="text"
-                  list="dhaka-dest-stops"
-                  value={toLoc}
-                  onChange={(e) => setToLoc(e.target.value)}
-                  placeholder="e.g. Mirpur 10, Farmgate, Motijheel..."
-                  className="w-full px-3 py-2 text-sm rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 font-medium"
-                />
+                <div className="relative">
+                  <input
+                    type="text"
+                    list="dhaka-dest-stops"
+                    value={toLoc}
+                    onChange={(e) => setToLoc(e.target.value)}
+                    placeholder="e.g. Mirpur 10, Farmgate, Motijheel..."
+                    spellCheck="false"
+                    autoComplete="off"
+                    className="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-300 bg-white text-slate-900 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 font-bold shadow-2xs pr-8"
+                    style={{ color: '#0f172a', backgroundColor: '#ffffff', colorScheme: 'light', fontWeight: '700', fontSize: '15px' }}
+                  />
+                  {toLoc && (
+                    <button
+                      type="button"
+                      onClick={() => setToLoc('')}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-sm font-bold w-5 h-5 flex items-center justify-center rounded-full hover:bg-slate-100"
+                      title="Clear destination"
+                    >
+                      ×
+                    </button>
+                  )}
+                </div>
                 <datalist id="dhaka-dest-stops">
                   {ALL_DHAKA_LOCATIONS.map(loc => (
                     <option key={loc} value={loc} />
@@ -255,19 +285,64 @@ export default function DhakaBusDirectory() {
 
           {/* ── Route Search Results ── */}
           {routeResult && (
-            <div className="space-y-4">
+            <div className="space-y-5">
+              {/* ── Metro Rail Shortest Way Path Recommendation (When Metro is Available) ── */}
+              {routeResult.metro_available && routeResult.shortest_way && (
+                <div className="rounded-2xl border-2 border-red-500 bg-gradient-to-r from-red-50 via-orange-50 to-amber-50 p-5 shadow-sm">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div className="flex items-start gap-3.5">
+                      <div className="w-12 h-12 rounded-2xl bg-red-600 text-white flex items-center justify-center font-bold text-2xl shadow-md shadow-red-600/30 shrink-0">
+                        🚇
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-xs font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-red-600 text-white shadow-2xs">
+                            ⚡ Shortest Way Path (সেরা ও দ্রুততম পথ)
+                          </span>
+                          <span className="text-xs font-bold text-red-800 bg-red-100/90 border border-red-200 px-2.5 py-0.5 rounded-full">
+                            Saves {routeResult.shortest_way.time_saved_min || 40}+ mins vs Road Traffic
+                          </span>
+                        </div>
+                        <h3 className="text-lg font-extrabold text-slate-900 mt-1">
+                          {routeResult.shortest_way.title} ({routeResult.shortest_way.title_bn || 'মেট্রোরেল'})
+                        </h3>
+                        <p className="text-xs text-slate-600 mt-0.5 max-w-2xl leading-relaxed">
+                          {routeResult.shortest_way.reason || 'Dhaka Metro Rail (MRT-6) is the shortest, fastest path. 100% traffic-jam free air-conditioned electric train operating every 5-8 minutes.'}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-3 bg-white px-4 py-2.5 rounded-xl border border-red-200 shadow-2xs self-start sm:self-auto shrink-0">
+                      <div className="text-center">
+                        <span className="text-[10px] text-slate-400 block uppercase font-bold">Fastest Time</span>
+                        <span className="text-base font-black text-red-600">
+                          ~{routeResult.shortest_way.est_time_min} mins
+                        </span>
+                      </div>
+                      <div className="w-px h-7 bg-slate-200"></div>
+                      <div className="text-center">
+                        <span className="text-[10px] text-slate-400 block uppercase font-bold">Govt. Fare</span>
+                        <span className="text-base font-black text-emerald-700">
+                          ৳{routeResult.shortest_way.fare_bdt || 45}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               <div className="flex items-center justify-between">
                 <h3 className="text-sm font-bold text-slate-800">
-                  Query Results for <span className="text-emerald-700">{routeResult.from}</span> → <span className="text-emerald-700">{routeResult.to}</span>
+                  Transport Options for <span className="text-emerald-700">{routeResult.from}</span> → <span className="text-emerald-700">{routeResult.to}</span>
                 </h3>
-                {routeResult.available && (
+                {routeResult.has_direct_bus && (
                   <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
-                    {routeResult.count} Direct Service{routeResult.count > 1 ? 's' : ''} Available
+                    {routeResult.count} Direct Bus Service{routeResult.count > 1 ? 's' : ''}
                   </span>
                 )}
               </div>
 
-              {routeResult.available && routeResult.buses && routeResult.buses.length > 0 ? (
+              {routeResult.has_direct_bus && routeResult.buses && routeResult.buses.length > 0 ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {routeResult.buses.map((bus) => {
                     const isExpanded = expandedBusId === bus.id;
@@ -392,34 +467,31 @@ export default function DhakaBusDirectory() {
                     );
                   })}
                 </div>
-              ) : (
-                /* No Direct Bus Available -> Rich Multi-Modal Connecting Transit Options */
-                <div className="space-y-4">
-                  <div className="rounded-2xl border border-amber-200 bg-amber-50/80 p-5 text-slate-800">
-                    <div className="flex items-start gap-3">
-                      <div className="w-9 h-9 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center font-bold text-lg shrink-0">
-                        ℹ️
-                      </div>
-                      <div className="space-y-1">
-                        <h4 className="text-base font-bold text-slate-900">
-                          No direct bus is available for this route ({routeResult.from} → {routeResult.to})
-                        </h4>
-                        <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
-                          Currently, no single bus operates direct from <strong>{routeResult.from}</strong> to <strong>{routeResult.to}</strong>.
-                          Explore the recommended connecting transit routes below using <strong>2-bus transfers</strong>, <strong>Dhaka Metro Rail (MRT-6)</strong>, and local feeder transit (Auto-rickshaw, CNG, Rickshaw):
-                        </p>
-                      </div>
+              ) : !routeResult.has_direct_bus && (
+                /* No Direct Bus Available Notice */
+                <div className="rounded-2xl border border-amber-200 bg-amber-50/80 p-5 text-slate-800">
+                  <div className="flex items-start gap-3">
+                    <div className="w-9 h-9 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center font-bold text-lg shrink-0">
+                      ℹ️
+                    </div>
+                    <div className="space-y-1">
+                      <h4 className="text-base font-bold text-slate-900">
+                        No direct single bus is available for this route ({routeResult.from} → {routeResult.to})
+                      </h4>
+                      <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
+                        Explore the recommended connecting transit routes below using <strong>2-bus transfers</strong>, <strong>Dhaka Metro Rail (MRT-6)</strong>, and local feeder transit (Auto-rickshaw, CNG, Rickshaw):
+                      </p>
                     </div>
                   </div>
-
-                  {/* Isometric Multi-Modal Transit Map when No Direct Bus is Available */}
-                  <IsometricTransitMap
-                    busTransit={routeResult}
-                    fromLocation={fromLoc}
-                    toLocation={toLoc}
-                  />
                 </div>
               )}
+
+              {/* ── OpenStreetMap Transit Map (Visualizes Shortest Metro Path or Bus Routes) ── */}
+              <OSMTransitMap
+                busTransit={routeResult}
+                fromLocation={fromLoc}
+                toLocation={toLoc}
+              />
             </div>
           )}
         </div>
@@ -436,7 +508,10 @@ export default function DhakaBusDirectory() {
               value={keyword}
               onChange={(e) => setKeyword(e.target.value)}
               placeholder="Search by bus name (e.g. ইতিহাস, রাজধানী, বৈশাখী, Welcome) or stoppage (Gabtoli, Savar)..."
-              className="w-full text-sm font-medium text-slate-800 focus:outline-none"
+              spellCheck="false"
+              autoComplete="off"
+              className="w-full text-sm font-bold text-slate-900 placeholder:text-slate-500 focus:outline-none bg-white"
+              style={{ color: '#0f172a', backgroundColor: '#ffffff', colorScheme: 'light', fontWeight: '700', fontSize: '15px' }}
             />
             {keyword && (
               <button

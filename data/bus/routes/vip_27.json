@@ -17,26 +17,25 @@
     "Radisson",
     "Banani",
     "Mohakhali",
-    "Nabisco",
-    "Moghbazar",
-    "Kakrail",
-    "Press Club",
-    "Gulisthan",
-    "Paltan",
-    "Bata Signal",
+    "Jahangir Gate",
+    "Farmgate",
+    "Asadgate",
+    "Dhanmondi 27",
+    "Kalabagan",
     "Science Lab",
+    "New Market",
     "Nilkhet",
     "Azimpur"
   ],
   "corridors_covered": [
     "R04",
-    "R05",
-    "R08"
+    "R08",
+    "R10"
   ],
   "fare_min_bdt": 15,
   "fare_max_bdt": 65,
   "first_bus": "05:30 AM",
   "last_bus": "11:00 PM",
-  "frequency_min": 8,
+  "frequency_min": 7,
   "operator": "VIP Transport Ltd."
 }

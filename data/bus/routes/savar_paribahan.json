@@ -5,7 +5,7 @@
   "route_code": "SV-01",
   "type": "Semi-Seating",
   "origin": "Savar Bus Stand",
-  "destination": "Gulisthan",
+  "destination": "Sayedabad / Gulisthan",
   "stoppages": [
     "Savar Bus Stand",
     "Hemayetpur",
@@ -15,11 +15,15 @@
     "Kallyanpur",
     "Shyamoli",
     "Asadgate",
-    "Science Lab",
+    "Farmgate",
+    "Karwan Bazar",
+    "Banglamotor",
     "Shahbagh",
+    "Matsya Bhaban",
     "Press Club",
     "Paltan",
-    "Gulisthan"
+    "Gulisthan",
+    "Sayedabad"
   ],
   "corridors_covered": [
     "R02",

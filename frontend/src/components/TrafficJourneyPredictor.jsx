@@ -1,8 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { ALL_DHAKA_LOCATIONS } from '../utils/journeyPredictor.js';
-import { predictJourneyApi, fetchBusesBetween } from '../api.js';
+import { predictJourneyApi } from '../api.js';
 import JourneyRouteMap from './JourneyRouteMap.jsx';
-import IsometricTransitMap from './IsometricTransitMap.jsx';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const getDayName = (dateStr) => {
@@ -12,9 +11,9 @@ const getDayName = (dateStr) => {
 };
 
 const LEVEL_CONFIG = {
-  High:   { bg: 'bg-red-50',    border: 'border-red-200',   badge: 'bg-red-500 text-white',   dot: 'bg-red-500',    label: 'High Traffic',   desc: 'Severe congestion expected. Allow extra time.' },
-  Medium: { bg: 'bg-amber-50',  border: 'border-amber-200', badge: 'bg-amber-400 text-white',  dot: 'bg-amber-400',  label: 'Moderate Traffic', desc: 'Moderate delays likely. Plan accordingly.' },
-  Low:    { bg: 'bg-green-50',  border: 'border-green-200', badge: 'bg-green-500 text-white',  dot: 'bg-green-500',  label: 'Low Traffic',    desc: 'Roads are flowing freely. Good time to travel.' },
+  High: { bg: 'bg-red-50', border: 'border-red-200', badge: 'bg-red-500 text-white', dot: 'bg-red-500', label: 'High Traffic', desc: 'Severe congestion expected. Allow extra time.' },
+  Medium: { bg: 'bg-amber-50', border: 'border-amber-200', badge: 'bg-amber-400 text-white', dot: 'bg-amber-400', label: 'Moderate Traffic', desc: 'Moderate delays likely. Plan accordingly.' },
+  Low: { bg: 'bg-green-50', border: 'border-green-200', badge: 'bg-green-500 text-white', dot: 'bg-green-500', label: 'Low Traffic', desc: 'Roads are flowing freely. Good time to travel.' },
 };
 
 const SEGMENT_TRAFFIC_STYLES = {
@@ -72,22 +71,21 @@ function RoutePathSection({ steps = [], checkpoints = [], roadSegments = [] }) {
             const label = isStart
               ? (/\(Start\)$/i.test(step) ? step : `${step} (Start)`)
               : isEnd
-              ? (/\(Destination\)$/i.test(step) ? step : `${step} (Destination)`)
-              : step;
+                ? (/\(Destination\)$/i.test(step) ? step : `${step} (Destination)`)
+                : step;
             return (
               <React.Fragment key={idx}>
-                <span className={`px-2.5 py-1 rounded-lg text-xs font-semibold shadow-2xs ${
-                  isStart
-                    ? 'bg-green-100 text-green-800 border border-green-300'
-                    : isEnd
+                <span className={`px-2.5 py-1 rounded-lg text-xs font-semibold shadow-2xs ${isStart
+                  ? 'bg-green-100 text-green-800 border border-green-300'
+                  : isEnd
                     ? 'bg-red-100 text-red-800 border border-red-300'
                     : 'bg-blue-100 text-blue-800 border border-blue-200'
-                }`}>
+                  }`}>
                   {label}
                 </span>
                 {!isEnd && (
                   <svg className="w-3.5 h-3.5 text-slate-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7"/>
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" />
                   </svg>
                 )}
               </React.Fragment>
@@ -129,9 +127,8 @@ function RoutePathSection({ steps = [], checkpoints = [], roadSegments = [] }) {
             {telemetrySegments.map((seg, idx) => (
               <span
                 key={`${seg.name}-${idx}`}
-                className={`px-2.5 py-1 rounded-md text-[11px] font-semibold border ${
-                  SEGMENT_TRAFFIC_STYLES[seg.level] || 'bg-slate-50 text-slate-700 border-slate-200'
-                }`}
+                className={`px-2.5 py-1 rounded-md text-[11px] font-semibold border ${SEGMENT_TRAFFIC_STYLES[seg.level] || 'bg-slate-50 text-slate-700 border-slate-200'
+                  }`}
               >
                 {seg.name}: <span className="underline">{seg.level}</span>{seg.speedKmh ? ` · ${seg.speedKmh} km/h` : ''}
               </span>
@@ -155,13 +152,13 @@ export default function TrafficJourneyPredictor() {
   const [selectedDate, setSelectedDate] = useState('');
   const [selectedTime, setSelectedTime] = useState('');
   const [fromLocation, setFromLocation] = useState('');
-  const [toLocation, setToLocation]     = useState('');
+  const [toLocation, setToLocation] = useState('');
 
   // Custom time picker state
   const [timePickerOpen, setTimePickerOpen] = useState(false);
-  const [pickerHour,   setPickerHour]   = useState('12');
+  const [pickerHour, setPickerHour] = useState('12');
   const [pickerMinute, setPickerMinute] = useState('00');
-  const [pickerAmPm,   setPickerAmPm]   = useState('AM');
+  const [pickerAmPm, setPickerAmPm] = useState('AM');
 
   // Close picker when clicking outside
   useEffect(() => {
@@ -210,7 +207,7 @@ export default function TrafficJourneyPredictor() {
     let hour24 = parseInt(h, 10);
     if (pickerAmPm === 'PM' && hour24 !== 12) hour24 += 12;
     if (pickerAmPm === 'AM' && hour24 === 12) hour24 = 0;
-    const time24 = `${String(hour24).padStart(2,'0')}:${m}`;
+    const time24 = `${String(hour24).padStart(2, '0')}:${m}`;
     setSelectedTime(time24);
     setTimePickerOpen(false);
     timeTriggerRef.current?.focus();
@@ -247,9 +244,9 @@ export default function TrafficJourneyPredictor() {
     setSelectedTime(time24);
     const [h, m] = time24.split(':').map(Number);
     const ampm = h >= 12 ? 'PM' : 'AM';
-    const h12  = h % 12 || 12;
-    setPickerHour(String(h12).padStart(2,'0'));
-    setPickerMinute(String(m).padStart(2,'0'));
+    const h12 = h % 12 || 12;
+    setPickerHour(String(h12).padStart(2, '0'));
+    setPickerMinute(String(m).padStart(2, '0'));
     setPickerAmPm(ampm);
     setTimePickerOpen(false);
   };
@@ -259,22 +256,22 @@ export default function TrafficJourneyPredictor() {
     if (!t) return '';
     const [h, m] = t.split(':').map(Number);
     const ampm = h >= 12 ? 'PM' : 'AM';
-    const h12  = h % 12 || 12;
-    return `${String(h12).padStart(2,'0')}:${String(m).padStart(2,'0')} ${ampm}`;
+    const h12 = h % 12 || 12;
+    return `${String(h12).padStart(2, '0')}:${String(m).padStart(2, '0')} ${ampm}`;
   };
 
   // UI state
-  const [loading, setLoading]               = useState(false);
-  const [result, setResult]                 = useState(null);
-  const [error, setError]                   = useState(null);
-  const [selectedAltIndex, setSelectedAltIndex]   = useState('primary');
-  const [formError, setFormError]           = useState('');
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState(null);
+  const [error, setError] = useState(null);
+  const [selectedAltIndex, setSelectedAltIndex] = useState('primary');
+  const [formError, setFormError] = useState('');
 
-  const dayName      = getDayName(selectedDate);
+  const dayName = getDayName(selectedDate);
   const isWeekendDay = dayName === 'Friday' || dayName === 'Saturday';
 
   // Quick date helpers
-  const setToday    = () => setSelectedDate(new Date().toISOString().split('T')[0]);
+  const setToday = () => setSelectedDate(new Date().toISOString().split('T')[0]);
   const setTomorrow = () => {
     const d = new Date(); d.setDate(d.getDate() + 1);
     setSelectedDate(d.toISOString().split('T')[0]);
@@ -304,7 +301,7 @@ export default function TrafficJourneyPredictor() {
     if (!selectedDate) { setFormError('Please select a travel date.'); return; }
     if (!selectedTime) { setFormError('Please select a travel time.'); return; }
     if (!fromLocation) { setFormError('Please select a starting location.'); return; }
-    if (!toLocation)   { setFormError('Please select a destination.'); return; }
+    if (!toLocation) { setFormError('Please select a destination.'); return; }
     if (fromLocation === toLocation) { setFormError('Origin and destination cannot be the same.'); return; }
 
     setLoading(true);
@@ -315,23 +312,13 @@ export default function TrafficJourneyPredictor() {
     try {
       const data = await predictJourneyApi({
         date: selectedDate,
-        day:  dayName,
+        day: dayName,
         time: selectedTime,
         from: fromLocation,
-        to:   toLocation,
+        to: toLocation,
       });
 
-      let busTransitData = data?.bus_transit;
-      if (!busTransitData || !busTransitData.buses) {
-        try {
-          const busRes = await fetchBusesBetween(fromLocation, toLocation);
-          if (busRes) {
-            busTransitData = busRes;
-          }
-        } catch (_) {}
-      }
-
-      setResult({ ...data, bus_transit: busTransitData });
+      setResult(data);
     } catch (err) {
       setError('Could not get prediction. Please check if the server is running.');
     } finally {
@@ -343,8 +330,8 @@ export default function TrafficJourneyPredictor() {
   const altList = result?.alternative_routes?.length
     ? result.alternative_routes
     : result?.alternative_route
-    ? [result.alternative_route]
-    : [];
+      ? [result.alternative_route]
+      : [];
   const activeAltCardIdx = typeof selectedAltIndex === 'number' ? selectedAltIndex : 0;
   const activeAlt = altList[activeAltCardIdx] || result?.alternative_route || null;
   const ALT_ROUTE_COLORS = ['#7c3aed', '#0d9488', '#ea580c']; // Purple, Teal, Orange
@@ -381,9 +368,8 @@ export default function TrafficJourneyPredictor() {
               />
               {selectedDate && dayName && (
                 <div className="flex pt-0.5">
-                  <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
-                    isWeekendDay ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'
-                  }`}>
+                  <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${isWeekendDay ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'
+                    }`}>
                     {dayName}
                   </span>
                 </div>
@@ -408,7 +394,7 @@ export default function TrafficJourneyPredictor() {
                 >
                   <span>{selectedTime ? formatDisplayTime(selectedTime) : 'Select time'}</span>
                   <svg className="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
                 </button>
               </div>
@@ -530,11 +516,10 @@ export default function TrafficJourneyPredictor() {
                           key={period}
                           type="button"
                           onClick={() => setPickerAmPm(period)}
-                          className={`px-2 py-1.5 text-xs font-semibold transition ${
-                            pickerAmPm === period
-                              ? 'bg-blue-600 text-white'
-                              : 'bg-white text-slate-600 hover:bg-slate-50'
-                          }`}
+                          className={`px-2 py-1.5 text-xs font-semibold transition ${pickerAmPm === period
+                            ? 'bg-blue-600 text-white'
+                            : 'bg-white text-slate-600 hover:bg-slate-50'
+                            }`}
                         >
                           {period}
                         </button>
@@ -569,13 +554,12 @@ export default function TrafficJourneyPredictor() {
 
               {/* Quick picks */}
               <div className="flex gap-2 pt-0.5">
-                {[['08:30','Morning Peak'],['14:00','Midday'],['18:30','Evening Peak']].map(([t,l]) => (
+                {[['08:30', 'Morning Peak'], ['14:00', 'Midday'], ['18:30', 'Evening Peak']].map(([t, l]) => (
                   <button key={t} type="button" onClick={() => setQuickTime(t)}
-                    className={`text-xs px-2 py-0.5 rounded-full border transition ${
-                      selectedTime === t
-                        ? 'bg-blue-600 text-white border-blue-600'
-                        : 'border-slate-200 text-slate-500 hover:border-blue-400 hover:text-blue-600'
-                    }`}>
+                    className={`text-xs px-2 py-0.5 rounded-full border transition ${selectedTime === t
+                      ? 'bg-blue-600 text-white border-blue-600'
+                      : 'border-slate-200 text-slate-500 hover:border-blue-400 hover:text-blue-600'
+                      }`}>
                     {l}
                   </button>
                 ))}
@@ -609,7 +593,7 @@ export default function TrafficJourneyPredictor() {
                   className="text-xs text-blue-600 hover:underline flex items-center gap-1">
                   <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                      d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"/>
+                      d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
                   </svg>
                   Swap
                 </button>
@@ -644,15 +628,15 @@ export default function TrafficJourneyPredictor() {
               {loading ? (
                 <>
                   <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
                   </svg>
                   Predicting...
                 </>
               ) : (
                 <>
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7"/>
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                   </svg>
                   Predict Traffic
                 </>
@@ -667,7 +651,7 @@ export default function TrafficJourneyPredictor() {
         <div className="bg-red-50 border border-red-200 rounded-xl px-5 py-4 text-sm text-red-700 flex items-start gap-3">
           <svg className="w-5 h-5 mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-              d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+              d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
           </svg>
           <div>
             <p className="font-semibold">Prediction failed</p>
@@ -708,11 +692,13 @@ export default function TrafficJourneyPredictor() {
             <div className="mt-5 pt-5 border-t border-slate-200 grid grid-cols-2 sm:grid-cols-4 gap-4">
               {[
                 { label: result.primary_route?.is_estimate !== false ? 'Est. Travel Time' : 'Travel Time', value: `${result.primary_route?.travel_time_min ?? '—'} min` },
-                { label: result.primary_route?.is_estimate !== false ? 'Est. Speed' : 'Speed',             value: `${result.primary_route?.speed_kmh ?? '—'} km/h` },
-                { label: 'Distance',                                                                        value: `${result.primary_route?.distance_km ?? '—'} km` },
-                { label: result.primary_route?.is_estimate !== false ? 'Est. Delay' : 'Delay',             value: result.primary_route?.traffic_delay_min > 0
+                { label: result.primary_route?.is_estimate !== false ? 'Est. Speed' : 'Speed', value: `${result.primary_route?.speed_kmh ?? '—'} km/h` },
+                { label: 'Distance', value: `${result.primary_route?.distance_km ?? '—'} km` },
+                {
+                  label: result.primary_route?.is_estimate !== false ? 'Est. Delay' : 'Delay', value: result.primary_route?.traffic_delay_min > 0
                     ? `+${result.primary_route.traffic_delay_min} min`
-                    : 'No delay' },
+                    : 'No delay'
+                },
               ].map(({ label, value }) => (
                 <div key={label} className="text-center">
                   <p className="text-xs text-slate-400 uppercase font-medium">{label}</p>
@@ -753,20 +739,18 @@ export default function TrafficJourneyPredictor() {
                 <button
                   type="button"
                   onClick={() => setSelectedAltIndex('primary')}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-semibold border transition flex items-center gap-2 ${
-                    selectedAltIndex === 'primary'
-                      ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
-                      : 'bg-white text-slate-700 border-slate-200 hover:border-blue-400'
-                  }`}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-semibold border transition flex items-center gap-2 ${selectedAltIndex === 'primary'
+                    ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
+                    : 'bg-white text-slate-700 border-slate-200 hover:border-blue-400'
+                    }`}
                 >
                   <span
                     className="w-2.5 h-2.5 rounded-full shrink-0"
                     style={{ backgroundColor: selectedAltIndex === 'primary' ? '#ffffff' : '#2563eb' }}
                   />
                   <span>Primary Route</span>
-                  <span className={`px-1.5 py-0.5 rounded text-[10px] ${
-                    selectedAltIndex === 'primary' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'
-                  }`}>
+                  <span className={`px-1.5 py-0.5 rounded text-[10px] ${selectedAltIndex === 'primary' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'
+                    }`}>
                     {result.traffic_prediction} · {result.primary_route?.travel_time_min}m
                   </span>
                 </button>
@@ -779,11 +763,10 @@ export default function TrafficJourneyPredictor() {
                       key={alt.id || idx}
                       type="button"
                       onClick={() => setSelectedAltIndex(idx)}
-                      className={`px-3 py-1.5 rounded-xl text-xs font-semibold border transition flex items-center gap-2 ${
-                        isSel
-                          ? 'text-white shadow-sm'
-                          : 'bg-white text-slate-700 border-slate-200 hover:border-slate-400'
-                      }`}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-semibold border transition flex items-center gap-2 ${isSel
+                        ? 'text-white shadow-sm'
+                        : 'bg-white text-slate-700 border-slate-200 hover:border-slate-400'
+                        }`}
                       style={isSel ? { backgroundColor: routeCol, borderColor: routeCol } : undefined}
                     >
                       <span
@@ -791,9 +774,8 @@ export default function TrafficJourneyPredictor() {
                         style={{ backgroundColor: isSel ? '#ffffff' : routeCol }}
                       />
                       <span>Alt {idx + 1}: {alt.via || alt.name}</span>
-                      <span className={`px-1.5 py-0.5 rounded text-[10px] ${
-                        isSel ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'
-                      }`}>
+                      <span className={`px-1.5 py-0.5 rounded text-[10px] ${isSel ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'
+                        }`}>
                         {alt.traffic_prediction || 'Low'} · {alt.travel_time_min}m
                       </span>
                     </button>
@@ -802,152 +784,144 @@ export default function TrafficJourneyPredictor() {
               </div>
             )}
 
-              {(selectedAltIndex === 'primary' || !activeAlt) ? (
-                <>
-                  <div className="flex items-start justify-between gap-4">
-                    <div>
-                      <span className="inline-block text-xs font-semibold px-2.5 py-1 bg-blue-100 text-blue-700 rounded-full mb-2">
-                        Primary Route · {result.traffic_prediction} Traffic
-                      </span>
-                      <h3 className="text-base font-bold text-slate-800">
-                        {result.primary_route?.name || `${result.from} to ${result.to}`}
-                      </h3>
-                      <p className="text-sm text-slate-500 mt-1">
-                        {result.primary_route?.matchedCorridor || 'Primary Dhaka Corridor'}
-                      </p>
-                    </div>
+            {(selectedAltIndex === 'primary' || !activeAlt) ? (
+              <>
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <span className="inline-block text-xs font-semibold px-2.5 py-1 bg-blue-100 text-blue-700 rounded-full mb-2">
+                      Primary Route · {result.traffic_prediction} Traffic
+                    </span>
+                    <h3 className="text-base font-bold text-slate-800">
+                      {result.primary_route?.name || `${result.from} to ${result.to}`}
+                    </h3>
+                    <p className="text-sm text-slate-500 mt-1">
+                      {result.primary_route?.matchedCorridor || 'Primary Dhaka Corridor'}
+                    </p>
                   </div>
+                </div>
 
-                  <div className="grid grid-cols-3 gap-3">
-                    {[
-                      { label: result.primary_route?.is_estimate !== false ? 'Est. Travel Time' : 'Travel Time', value: `${result.primary_route?.travel_time_min ?? '—'} min`, color: 'text-blue-700' },
-                      { label: result.primary_route?.is_estimate !== false ? 'Est. Speed' : 'Speed',             value: `${result.primary_route?.speed_kmh ?? '—'} km/h` },
-                      { label: 'Distance',                                                                        value: `${result.primary_route?.distance_km ?? '—'} km` },
-                    ].map(({ label, value, color }) => (
-                      <div key={label} className="bg-white rounded-xl p-3 text-center border border-blue-100">
-                        <p className="text-xs text-slate-400 uppercase font-medium">{label}</p>
-                        <p className={`text-sm font-bold mt-0.5 ${color || 'text-slate-800'}`}>{value}</p>
-                      </div>
-                    ))}
-                  </div>
-
-                  {/* Primary route steps */}
-                  <RoutePathSection
-                    steps={result.primary_route?.steps}
-                    checkpoints={result.primary_route?.checkpoints}
-                    roadSegments={result.primary_route?.road_segments}
-                  />
-
-                  {result.primary_route?.google_maps_url && (
-                    <a href={result.primary_route.google_maps_url}
-                      target="_blank" rel="noopener noreferrer"
-                      className="inline-flex items-center gap-2 text-sm font-semibold text-blue-700 hover:underline">
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                          d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/>
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                          d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/>
-                      </svg>
-                      Open in Google Maps
-                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                          d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/>
-                      </svg>
-                    </a>
-                  )}
-                </>
-              ) : activeAlt && (
-                <>
-                  <div className="flex items-start justify-between gap-4">
-                    <div>
-                      <span className="inline-block text-xs font-semibold px-2.5 py-1 bg-blue-100 text-blue-700 rounded-full mb-2">
-                        {activeAlt.tag || 'Bypass Route'} · {activeAlt.traffic_prediction || 'Low'} Traffic
-                      </span>
-                      <h3 className="text-base font-bold text-slate-800">
-                        {activeAlt.name}
-                      </h3>
-                      <p className="text-sm text-slate-500 mt-1">
-                        Via {activeAlt.via || 'Bypass Corridor'}
-                      </p>
+                <div className="grid grid-cols-3 gap-3">
+                  {[
+                    { label: result.primary_route?.is_estimate !== false ? 'Est. Travel Time' : 'Travel Time', value: `${result.primary_route?.travel_time_min ?? '—'} min`, color: 'text-blue-700' },
+                    { label: result.primary_route?.is_estimate !== false ? 'Est. Speed' : 'Speed', value: `${result.primary_route?.speed_kmh ?? '—'} km/h` },
+                    { label: 'Distance', value: `${result.primary_route?.distance_km ?? '—'} km` },
+                  ].map(({ label, value, color }) => (
+                    <div key={label} className="bg-white rounded-xl p-3 text-center border border-blue-100">
+                      <p className="text-xs text-slate-400 uppercase font-medium">{label}</p>
+                      <p className={`text-sm font-bold mt-0.5 ${color || 'text-slate-800'}`}>{value}</p>
                     </div>
-                    {activeAlt.time_saved_min !== undefined && (
-                      <div className="text-right shrink-0">
-                        <p className="text-xs text-slate-500">
-                          {activeAlt.time_saved_min >= 0 ? 'Est. time saved' : 'vs Primary'}
-                        </p>
-                        <p className={`text-lg font-bold ${
-                          activeAlt.time_saved_min > 0
-                            ? 'text-green-600'
-                            : activeAlt.time_saved_min < 0
-                            ? 'text-amber-600'
-                            : 'text-slate-600'
+                  ))}
+                </div>
+
+                {/* Primary route steps */}
+                <RoutePathSection
+                  steps={result.primary_route?.steps}
+                  checkpoints={result.primary_route?.checkpoints}
+                  roadSegments={result.primary_route?.road_segments}
+                />
+
+                {result.primary_route?.google_maps_url && (
+                  <a href={result.primary_route.google_maps_url}
+                    target="_blank" rel="noopener noreferrer"
+                    className="inline-flex items-center gap-2 text-sm font-semibold text-blue-700 hover:underline">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                        d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                        d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                    Open in Google Maps
+                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                        d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                    </svg>
+                  </a>
+                )}
+              </>
+            ) : activeAlt && (
+              <>
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <span className="inline-block text-xs font-semibold px-2.5 py-1 bg-blue-100 text-blue-700 rounded-full mb-2">
+                      {activeAlt.tag || 'Bypass Route'} · {activeAlt.traffic_prediction || 'Low'} Traffic
+                    </span>
+                    <h3 className="text-base font-bold text-slate-800">
+                      {activeAlt.name}
+                    </h3>
+                    <p className="text-sm text-slate-500 mt-1">
+                      Via {activeAlt.via || 'Bypass Corridor'}
+                    </p>
+                  </div>
+                  {activeAlt.time_saved_min !== undefined && (
+                    <div className="text-right shrink-0">
+                      <p className="text-xs text-slate-500">
+                        {activeAlt.time_saved_min >= 0 ? 'Est. time saved' : 'vs Primary'}
+                      </p>
+                      <p className={`text-lg font-bold ${activeAlt.time_saved_min > 0
+                        ? 'text-green-600'
+                        : activeAlt.time_saved_min < 0
+                          ? 'text-amber-600'
+                          : 'text-slate-600'
                         }`}>
-                          {activeAlt.time_saved_min > 0
-                            ? `~${activeAlt.time_saved_min} min`
-                            : activeAlt.time_saved_min < 0
+                        {activeAlt.time_saved_min > 0
+                          ? `~${activeAlt.time_saved_min} min`
+                          : activeAlt.time_saved_min < 0
                             ? `+${Math.abs(activeAlt.time_saved_min)} min`
                             : '0 min'}
-                        </p>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Comparison */}
-                  <div className="grid grid-cols-3 gap-3">
-                    {[
-                      { label: activeAlt.is_estimate !== false ? 'Est. Alt. Time' : 'Alt. Travel Time', value: `${activeAlt.travel_time_min} min`, color: 'text-blue-700' },
-                      { label: 'Est. Speed',       value: `${activeAlt.bypass_speed_kmh} km/h` },
-                      { label: 'Distance',         value: `${activeAlt.distance_km} km` },
-                    ].map(({ label, value, color }) => (
-                      <div key={label} className="bg-white rounded-xl p-3 text-center border border-blue-100">
-                        <p className="text-xs text-slate-400 uppercase font-medium">{label}</p>
-                        <p className={`text-sm font-bold mt-0.5 ${color || 'text-slate-800'}`}>{value}</p>
-                      </div>
-                    ))}
-                  </div>
-
-                  {/* Route steps */}
-                  <RoutePathSection
-                    steps={activeAlt.steps}
-                    checkpoints={activeAlt.checkpoints}
-                    roadSegments={activeAlt.road_segments}
-                  />
-
-                  {/* Reason */}
-                  {activeAlt.reason && (
-                    <p className="text-xs text-blue-700 bg-blue-100 rounded-xl px-4 py-3">
-                      <strong>Why this route: </strong>{activeAlt.reason}
-                    </p>
+                      </p>
+                    </div>
                   )}
+                </div>
 
-                  {/* Google Maps link */}
-                  {activeAlt.google_maps_url && (
-                    <a href={activeAlt.google_maps_url}
-                      target="_blank" rel="noopener noreferrer"
-                      className="inline-flex items-center gap-2 text-sm font-semibold text-blue-700 hover:underline">
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                          d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/>
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                          d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/>
-                      </svg>
-                      Open in Google Maps
-                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                          d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/>
-                      </svg>
-                    </a>
-                  )}
-                </>
-              )}
+                {/* Comparison */}
+                <div className="grid grid-cols-3 gap-3">
+                  {[
+                    { label: activeAlt.is_estimate !== false ? 'Est. Alt. Time' : 'Alt. Travel Time', value: `${activeAlt.travel_time_min} min`, color: 'text-blue-700' },
+                    { label: 'Est. Speed', value: `${activeAlt.bypass_speed_kmh} km/h` },
+                    { label: 'Distance', value: `${activeAlt.distance_km} km` },
+                  ].map(({ label, value, color }) => (
+                    <div key={label} className="bg-white rounded-xl p-3 text-center border border-blue-100">
+                      <p className="text-xs text-slate-400 uppercase font-medium">{label}</p>
+                      <p className={`text-sm font-bold mt-0.5 ${color || 'text-slate-800'}`}>{value}</p>
+                    </div>
+                  ))}
+                </div>
 
-              {/* ── Route-Wise Multi-Modal Transit Isometric Map ── */}
-              <IsometricTransitMap
-                busTransit={result.bus_transit}
-                fromLocation={result.from || fromLocation}
-                toLocation={result.to || toLocation}
-              />
-            </div>
+                {/* Route steps */}
+                <RoutePathSection
+                  steps={activeAlt.steps}
+                  checkpoints={activeAlt.checkpoints}
+                  roadSegments={activeAlt.road_segments}
+                />
+
+                {/* Reason */}
+                {activeAlt.reason && (
+                  <p className="text-xs text-blue-700 bg-blue-100 rounded-xl px-4 py-3">
+                    <strong>Why this route: </strong>{activeAlt.reason}
+                  </p>
+                )}
+
+                {/* Google Maps link */}
+                {activeAlt.google_maps_url && (
+                  <a href={activeAlt.google_maps_url}
+                    target="_blank" rel="noopener noreferrer"
+                    className="inline-flex items-center gap-2 text-sm font-semibold text-blue-700 hover:underline">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                        d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                        d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                    Open in Google Maps
+                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                        d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                    </svg>
+                  </a>
+                )}
+              </>
+            )}
+          </div>
         </div>
       )}
     </div>
