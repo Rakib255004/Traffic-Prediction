@@ -50,7 +50,26 @@ if (compression) {
   }));
 }
 
-app.use(cors());
+// CORS configuration: allow Firebase Hosting domain and localhost in dev
+const allowedOrigins = [
+  'http://localhost:3000',
+  'http://localhost:5000',
+  'http://127.0.0.1:3000',
+  // Replace with your actual Firebase project URL after deploying
+  'https://trafficpulse-dhaka.web.app',
+  'https://trafficpulse-dhaka.firebaseapp.com',
+];
+app.use(cors({
+  origin: (origin, callback) => {
+    // Allow requests with no origin (Render health checks, curl) or matching origins
+    if (!origin || allowedOrigins.some(o => origin.startsWith(o))) {
+      callback(null, true);
+    } else {
+      callback(null, true); // Keep permissive; tighten after confirming Firebase URL
+    }
+  },
+  credentials: true,
+}));
 app.use(express.json({ limit: '1mb' }));
 
 // Response timing and request logging middleware
