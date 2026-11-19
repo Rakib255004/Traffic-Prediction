@@ -51,45 +51,6 @@ An AI-powered intelligent transportation system and real-time traffic prediction
 
 ---
 
-## 🏛️ System Architecture
-
-TrafficPulse utilizes a **decoupled Client-Server cloud architecture**:
-
-```mermaid
-flowchart TD
-    subgraph ClientLayer["🌐 Client Layer (User Device)"]
-        Browser["Desktop & Mobile Browsers"]
-    end
-
-    subgraph FirebaseLayer["☁️ Google Firebase Hosting"]
-        CDN["Firebase CDN Edge<br/>(trafficpulse-dhaka.web.app)"]
-        SPA["React 19 + Vite Static Bundle<br/>• In-Memory Routing Cache<br/>• Offline Fallback Engine"]
-    end
-
-    subgraph RenderLayer["☁️ Render.com Cloud Platform"]
-        API["Node.js + Express REST API<br/>(traffic-prediction-q1yl.onrender.com)"]
-        DataEngine["Data Analytics & A* OSM Pathfinding Engine"]
-        CSV["data/traffic_data.csv<br/>(47,490+ Observations)"]
-        GeoJSON["data/dhaka_roads.geojson<br/>(2,805 Road Segments)"]
-    end
-
-    subgraph ExternalAPIs["🔗 Third-Party Telemetry"]
-        GoogleMaps["Google Maps Routes API v2<br/>(Multi-Key Failover Pool)"]
-        OpenWeather["OpenWeatherMap API<br/>(Live Dhaka Weather)"]
-        OSM["OpenStreetMap Overpass API"]
-    end
-
-    Browser -->|"1. Static Assets (HTTPS)"| CDN
-    CDN --> SPA
-    Browser -->|"2. REST API Requests (/api/*)"| API
-    API --> DataEngine
-    DataEngine --> CSV
-    DataEngine --> GeoJSON
-    DataEngine -.-> ExternalAPIs
-```
-
----
-
 ## 📁 Repository Structure
 
 ```
@@ -204,11 +165,11 @@ Render automatically builds and spins up the updated container!
 
 Developed as an intelligent transportation system and predictive analytics project for Greater Dhaka:
 
-| Author | Role & GitHub |
+| Author | GitHub |
 | :--- | :--- |
-| **Zannatul Farzana Maria** | Author · [@maRia-1506A](https://github.com/maRia-1506A) |
-| **K. M. Fathum Mubin** | Author · [@mubin25s](https://github.com/mubin25s) |
-| **Rakib Rohan** | Author · [@Rakib255004](https://github.com/Rakib255004) |
+| **Zannatul Farzana Maria** | [@maRia-1506A](https://github.com/maRia-1506A) |
+| **K. M. Fathum Mubin** | [@mubin25s](https://github.com/mubin25s) |
+| **Rakib Rohan** | [@Rakib255004](https://github.com/Rakib255004) |
 
 ---
 
