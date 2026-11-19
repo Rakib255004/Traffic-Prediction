@@ -281,8 +281,8 @@ export default function TrafficInsights() {
   const [loading, setLoading]           = useState(() => !cachedHistoryData);
   const [isSyncing, setIsSyncing]       = useState(false);
   const [lastSynced, setLastSynced]     = useState(() => cachedHistoryData?.lastSynced || null);
-  const [autoSync, setAutoSync]         = useState(false);
-  const [syncIntervalSec, setSyncIntervalSec] = useState(120);
+  const [autoSync, setAutoSync]         = useState(true);
+  const [syncIntervalSec, setSyncIntervalSec] = useState(20);
   const [error, setError]               = useState(null);
   const [totalRecords, setTotalRecords] = useState(() => cachedHistoryData?.total || 0);
   const [isOffline, setIsOffline]       = useState(() => cachedHistoryData?.isOffline || false);
