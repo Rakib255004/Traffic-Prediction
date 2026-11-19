@@ -205,7 +205,19 @@ app.get('/api/history', (req, res) => {
     const limit = isAll ? total : (rawLimit && rawLimit > 0 ? rawLimit : 20);
     const page = parseInt(req.query.page, 10) || 1;
     const startIndex = isAll ? 0 : (page - 1) * limit;
-    const paginated = isAll ? records : records.slice(startIndex, startIndex + limit);
+    let paginated = isAll ? records : records.slice(startIndex, startIndex + limit);
+
+    // Fast compact mode for dashboard analytics (transfers 1MB instead of 50MB)
+    if (req.query.compact === 'true') {
+      paginated = paginated.map(r => ({
+        timestamp: r.timestamp,
+        hour: r.hour,
+        traffic_level: r.traffic_level || r.target_traffic_level,
+        traffic_speed_kmh: r.traffic_speed_kmh,
+        traffic_delay_min: r.traffic_delay_min,
+        road_route_id: r.road_route_id,
+      }));
+    }
 
     res.json({
       success: true,

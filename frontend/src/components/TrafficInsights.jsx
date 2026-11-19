@@ -297,19 +297,22 @@ export default function TrafficInsights() {
     }
     setError(null);
     try {
-      const res = await fetchHistory({ page: 1, limit: 10000, all: true });
+      const res = await fetchHistory({ page: 1, limit: 10000, all: true, compact: true });
       if (res && res.success) {
         const recs = res.data || [];
         const tot = res.total || recs.length || 0;
         const off = Boolean(res.isOffline);
         const now = new Date();
 
-        cachedHistoryData = {
-          records: recs,
-          total: tot,
-          isOffline: off,
-          lastSynced: now,
-        };
+        // Only cache live server data into memory cache
+        if (!off) {
+          cachedHistoryData = {
+            records: recs,
+            total: tot,
+            isOffline: off,
+            lastSynced: now,
+          };
+        }
 
         setRecords(recs);
         setTotalRecords(tot);

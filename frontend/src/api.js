@@ -208,14 +208,16 @@ export async function fetchHistory(params = {}) {
     if (params.page) query.set('page', params.page);
     if (params.limit) query.set('limit', params.limit);
     if (params.all) query.set('all', 'true');
+    if (params.compact) query.set('compact', 'true');
     if (params.level && params.level !== 'ALL') query.set('level', params.level);
     if (params.search) query.set('search', params.search);
     query.set('_t', Date.now());
 
+    // Allow generous 30s timeout for full historical dataset download across cloud
     const res = await fetchWithTimeout(`${API_BASE}/history?${query.toString()}`, {
       cache: 'no-store',
       headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' }
-    });
+    }, 30000);
     if (res.ok) {
       const json = await res.json();
       if (json && json.success) return json;
