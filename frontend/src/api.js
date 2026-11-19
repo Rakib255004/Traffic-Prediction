@@ -4,6 +4,8 @@ import { NODE_COORDINATES, OFFICIAL_ROUTES, ALL_ROUTES, DHAKA_BYPASS_WAYPOINTS }
 // API Service for Dhaka Traffic Prediction System
 // High-resilience client with automatic live backend detection and offline fallback
 
+// In production (Firebase Hosting), API calls are proxied to the Render backend.
+// In development, Vite proxies /api to localhost:5000.
 const API_BASE = '/api';
 
 // Helper to generate full route telemetry client-side when backend is offline
