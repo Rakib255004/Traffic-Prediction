@@ -136,6 +136,9 @@ const calcDistanceKm = (coord1, coord2) => {
   return R * c;
 };
 
+// In-memory module cache for instant switching without re-fetching
+let cachedExploreData = null;
+
 export default function ExploreMap() {
   const containerRef         = useRef(null);
   const mapRef               = useRef(null);
@@ -148,11 +151,11 @@ export default function ExploreMap() {
   const measureLayerRef      = useRef(null);
 
   // Data state
-  const [routes, setRoutes]               = useState([]);
-  const [waypoints, setWaypoints]         = useState([]);
-  const [loading, setLoading]             = useState(true);
+  const [routes, setRoutes]               = useState(() => cachedExploreData?.routes || []);
+  const [waypoints, setWaypoints]         = useState(() => cachedExploreData?.waypoints || []);
+  const [loading, setLoading]             = useState(() => !cachedExploreData);
   const [error, setError]                 = useState(null);
-  const [isOffline, setIsOffline]         = useState(false);
+  const [isOffline, setIsOffline]         = useState(() => cachedExploreData?.isOffline || false);
 
   // Filters & Controls
   const [scope, setScope]                 = useState('50_OFFICIAL'); // '50_OFFICIAL' | 'ALL_ROUTES'
@@ -179,8 +182,10 @@ export default function ExploreMap() {
   const [isCalculatingMeasure, setIsCalculatingMeasure] = useState(false);
 
   // ── Load & Merge OSM Geometry with Telemetry Data ──────────────────────────
-  const loadData = async () => {
-    setLoading(true);
+  const loadData = async (isInitial = false) => {
+    if (isInitial && !cachedExploreData) {
+      setLoading(true);
+    }
     setError(null);
     try {
       const [overlayRes, routesRes, waypointsRes] = await Promise.all([
@@ -239,19 +244,30 @@ export default function ExploreMap() {
 
       setRoutes(enriched);
 
-      if (waypointsRes && waypointsRes.success && Array.isArray(waypointsRes.waypoints)) {
-        setWaypoints(waypointsRes.waypoints);
+      const wps = (waypointsRes && waypointsRes.success && Array.isArray(waypointsRes.waypoints))
+        ? waypointsRes.waypoints
+        : [];
+      if (wps.length) {
+        setWaypoints(wps);
       }
+
+      cachedExploreData = {
+        routes: enriched,
+        waypoints: wps,
+        isOffline: Boolean(routesRes?.isOffline)
+      };
     } catch (e) {
       console.warn('ExploreMap load error:', e);
-      setError('Could not load Dhaka road network data. Verify backend server is running on port 5000.');
+      if (!cachedExploreData) {
+        setError('Could not load Dhaka road network data. Verify backend server is running on port 5000.');
+      }
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    loadData();
+    loadData(true);
   }, []);
 
   // ── Calculate Live Network Summary Stats ────────────────────────────────────

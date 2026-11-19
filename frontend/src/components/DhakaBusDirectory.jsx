@@ -1,10 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { ALL_DHAKA_LOCATIONS } from '../utils/journeyPredictor.js';
 import OSMTransitMap from './OSMTransitMap.jsx';
+import { API_BASE, fetchWithTimeout } from '../api.js';
+
+// Module-level cache so navigating between pages renders instantly
+let cachedBuses = null;
 
 export default function DhakaBusDirectory() {
-  const [buses, setBuses] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [buses, setBuses] = useState(() => cachedBuses || []);
+  const [loading, setLoading] = useState(() => !cachedBuses);
   const [error, setError] = useState(null);
 
   // Search mode: 'route' (From -> To) or 'keyword' (Search by Name / Stop)
@@ -24,13 +28,15 @@ export default function DhakaBusDirectory() {
   // Load master bus directory on mount
   useEffect(() => {
     async function loadMasterBuses() {
+      if (cachedBuses && cachedBuses.length) return;
       try {
         setLoading(true);
-        const res = await fetch('/api/buses');
+        const res = await fetchWithTimeout(`${API_BASE}/buses`);
         if (res.ok) {
           const json = await res.json();
           if (json && json.success) {
-            setBuses(json.data || []);
+            cachedBuses = json.data || [];
+            setBuses(cachedBuses);
           }
         }
       } catch (err) {
@@ -55,7 +61,7 @@ export default function DhakaBusDirectory() {
     setError(null);
 
     try {
-      const res = await fetch(`/api/buses?from=${encodeURIComponent(fromLoc)}&to=${encodeURIComponent(toLoc)}`);
+      const res = await fetchWithTimeout(`${API_BASE}/buses?from=${encodeURIComponent(fromLoc)}&to=${encodeURIComponent(toLoc)}`);
       if (res.ok) {
         const json = await res.json();
         setRouteResult(json);
