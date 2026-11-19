@@ -1,0 +1,40 @@
+{
+  "id": "taranga_plus",
+  "name": "Taranga Plus",
+  "name_bn": "তরঙ্গ প্লাস",
+  "route_code": "TRG-01",
+  "type": "Semi-Seating",
+  "origin": "Mohammadpur",
+  "destination": "South Banasree",
+  "stoppages": [
+    "Mohammadpur Bus Stand",
+    "Shankar",
+    "Star Kabab / Dhanmondi 15",
+    "Jigatola",
+    "City College",
+    "Science Lab",
+    "Bata Signal",
+    "Shahbagh",
+    "Matsya Bhaban",
+    "Kakrail",
+    "Shantinagar",
+    "Malibagh Mor",
+    "Mouchak",
+    "Malibagh Railgate",
+    "Hazipara",
+    "Rampura Bazar",
+    "Rampura Bridge",
+    "Banasree",
+    "South Banasree"
+  ],
+  "corridors_covered": [
+    "R05",
+    "R44"
+  ],
+  "fare_min_bdt": 10,
+  "fare_max_bdt": 35,
+  "first_bus": "06:00 AM",
+  "last_bus": "10:30 PM",
+  "frequency_min": 7,
+  "operator": "Taranga Transport Ltd."
+}

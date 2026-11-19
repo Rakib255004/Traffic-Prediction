@@ -21,6 +21,8 @@ export class GoogleRoutesClient {
     // High-performance LRU/TTL cache for route queries (5 min TTL)
     this.cache = new Map();
     this.cacheTtlMs = 5 * 60 * 1000;
+    this.exhaustedKeys = new Map(); // key -> cooldown until timestamp
+    this.quotaWarned = false;
   }
 
   get hasKey() {
@@ -29,7 +31,17 @@ export class GoogleRoutesClient {
 
   getActiveKey() {
     if (!this.keys.length) return null;
-    return this.keys[this.currentIndex % this.keys.length];
+    const now = Date.now();
+    for (let i = 0; i < this.keys.length; i++) {
+      const idx = (this.currentIndex + i) % this.keys.length;
+      const key = this.keys[idx];
+      const cooldownUntil = this.exhaustedKeys.get(key) || 0;
+      if (now > cooldownUntil) {
+        this.currentIndex = idx;
+        return key;
+      }
+    }
+    return null; // All keys currently exhausted
   }
 
   rotateKey() {
@@ -53,6 +65,15 @@ export class GoogleRoutesClient {
     const now = Date.now();
     if (cached && (now - cached.timestamp < this.cacheTtlMs)) {
       return { ...cached.data, cached: true, latency_ms: 1 };
+    }
+
+    const availableKey = this.getActiveKey();
+    if (!availableKey) {
+      if (!this.quotaWarned) {
+        console.warn('[Google API] Notice: Configured Google Maps API keys reached daily quota limit (HTTP 429). Using OpenStreetMap / OSRM Live Road Engine.');
+        this.quotaWarned = true;
+      }
+      return { success: false, error: 'Google Routes API daily quota exceeded on all keys' };
     }
 
     const requestBody = {
@@ -141,7 +162,14 @@ export class GoogleRoutesClient {
           }
         } else {
           const errText = await res.text();
-          console.warn(`[Google API] Key returned status ${res.status}: ${errText}`);
+          if (res.status === 429 || res.status === 403) {
+            this.exhaustedKeys.set(availableKey, Date.now() + 30 * 60 * 1000);
+            if (!this.quotaWarned) {
+              console.warn(`[Google API] Key reached quota (${res.status}). Switching to available keys or OSRM fallback.`);
+            }
+          } else {
+            console.warn(`[Google API] Key returned status ${res.status}: ${errText}`);
+          }
           this.rotateKey();
           attempts++;
         }
@@ -274,6 +302,7 @@ export class WazeClient {
 
     try {
       const res = await fetch(url, {
+        signal: AbortSignal.timeout(3000),
         headers: {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/122.0.0.0 Safari/537.36',
           'Referer': 'https://www.waze.com/live-map/',
@@ -308,8 +337,38 @@ export class WazeClient {
           };
         }
       }
-    } catch (err) {
-      console.warn('[Waze] Live probe fetch error:', err.message);
+    } catch {
+      // Fall through to OSRM real road network engine
+    }
+
+    // High-availability OSRM Live Road Network API (Zero-Key, Real OSM Street Geometry)
+    try {
+      const osrmUrl = `https://router.project-osrm.org/route/v1/driving/${origLon},${origLat};${destLon},${destLat}?overview=false`;
+      const osrmRes = await fetch(osrmUrl, { signal: AbortSignal.timeout(5000) });
+      if (osrmRes.ok) {
+        const osrmData = await osrmRes.json();
+        const route = osrmData.routes?.[0];
+        if (route) {
+          const totalSec = route.duration || 0;
+          const lengthM = route.distance || 0;
+          const travelTimeMin = Math.max(1.0, Number((totalSec / 60.0).toFixed(1)));
+          const distKm = Math.max(0.5, Number((lengthM / 1000.0).toFixed(2)));
+          const speedKmh = Number((distKm / Math.max(travelTimeMin / 60.0, 0.05)).toFixed(1));
+
+          return {
+            success: true,
+            provider: 'OSRM Live Road API',
+            travel_time_min: travelTimeMin,
+            free_flow_time_min: travelTimeMin,
+            traffic_delay_min: 0.0,
+            distance_km: distKm,
+            speed_kmh: speedKmh,
+            route_name: 'OSM Street Route'
+          };
+        }
+      }
+    } catch (osrmErr) {
+      console.warn('[OSRM] Live routing error:', osrmErr.message);
     }
 
     return { success: false, error: 'Waze route not available' };

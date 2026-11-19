@@ -1,0 +1,17 @@
+name: trafficpulse-api
+env: node
+buildCommand: npm install
+startCommand: node server/index.js
+envVars:
+  - key: NODE_ENV
+    value: production
+  - key: PORT
+    value: 10000
+  - key: HOST
+    value: 0.0.0.0
+  - key: GOOGLE_MAPS_API_KEYS
+    sync: false
+  - key: GOOGLE_MAPS_API_KEY
+    sync: false
+  - key: OPENWEATHERMAP_API_KEY
+    sync: false

@@ -1,0 +1,41 @@
+{
+  "id": "itihas_paribahan",
+  "name": "Itihas Paribahan",
+  "name_bn": "ইতিহাস পরিবহন",
+  "route_code": "ITH-01",
+  "type": "Semi-Seating",
+  "origin": "Mirpur 14",
+  "destination": "Chandra / Nandan Park",
+  "stoppages": [
+    "Mirpur 14",
+    "Mirpur 10",
+    "Mirpur 2",
+    "Mirpur 1",
+    "Ansar Camp",
+    "Technical",
+    "Gabtoli",
+    "Aminbazar",
+    "Hemayetpur",
+    "Savar Bus Stand",
+    "Radio Colony",
+    "C&B Mor",
+    "Nabinagar",
+    "EPZ",
+    "Baipail",
+    "Zirani Bazar",
+    "Nandan Park",
+    "Chandra"
+  ],
+  "corridors_covered": [
+    "R02",
+    "R13",
+    "R27",
+    "R31"
+  ],
+  "fare_min_bdt": 15,
+  "fare_max_bdt": 65,
+  "first_bus": "05:30 AM",
+  "last_bus": "11:00 PM",
+  "frequency_min": 6,
+  "operator": "Itihas Paribahan Ltd."
+}

@@ -4,7 +4,27 @@ import { NODE_COORDINATES, OFFICIAL_ROUTES, ALL_ROUTES, DHAKA_BYPASS_WAYPOINTS }
 // API Service for Dhaka Traffic Prediction System
 // High-resilience client with automatic live backend detection and offline fallback
 
-const API_BASE = '/api';
+// In production, calls go directly to the Render backend.
+// In development, Vite proxies /api to localhost:5000.
+export const API_BASE = import.meta.env.PROD
+  ? 'https://traffic-prediction-q1yl.onrender.com/api'
+  : '/api';
+
+// Maximum time to wait for backend before falling back to local dataset (prevents infinite spinner during Render cold-start)
+export const FETCH_TIMEOUT_MS = 6000;
+
+export async function fetchWithTimeout(url, options = {}, timeoutMs = FETCH_TIMEOUT_MS) {
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, {
+      ...options,
+      signal: options.signal || controller.signal,
+    });
+  } finally {
+    clearTimeout(id);
+  }
+}
 
 // Helper to generate full route telemetry client-side when backend is offline
 function generateFallbackRoutes() {
@@ -45,7 +65,7 @@ function generateFallbackRoutes() {
 
 export async function fetchStats() {
   try {
-    const res = await fetch(`${API_BASE}/stats`);
+    const res = await fetchWithTimeout(`${API_BASE}/stats`);
     if (res.ok) {
       const json = await res.json();
       if (json && json.success) return json;
@@ -91,7 +111,7 @@ export async function fetchRoutes(params = {}) {
     if (params.level && params.level !== 'ALL') query.set('level', params.level);
     if (params.search) query.set('search', params.search);
 
-    const res = await fetch(`${API_BASE}/routes?${query.toString()}`);
+    const res = await fetchWithTimeout(`${API_BASE}/routes?${query.toString()}`);
     if (res.ok) {
       const json = await res.json();
       if (json && json.success) return json;
@@ -125,7 +145,7 @@ export async function fetchRoutes(params = {}) {
 
 export async function fetchRouteDetails(routeCode) {
   try {
-    const res = await fetch(`${API_BASE}/routes/${routeCode}`);
+    const res = await fetchWithTimeout(`${API_BASE}/routes/${routeCode}`);
     if (res.ok) {
       const json = await res.json();
       if (json && json.success) return json;
@@ -145,7 +165,7 @@ export async function fetchRouteDetails(routeCode) {
 
 export async function fetchWaypoints() {
   try {
-    const res = await fetch(`${API_BASE}/waypoints`);
+    const res = await fetchWithTimeout(`${API_BASE}/waypoints`);
     if (res.ok) {
       const json = await res.json();
       if (json && json.success) return json;
@@ -171,7 +191,7 @@ export async function fetchWaypoints() {
 
 export async function fetchCorridorsOverlay() {
   try {
-    const res = await fetch(`${API_BASE}/corridors/osm-overlay`);
+    const res = await fetchWithTimeout(`${API_BASE}/corridors/osm-overlay`);
     if (res.ok) {
       const json = await res.json();
       if (json && json.success) return json;
@@ -192,7 +212,7 @@ export async function fetchHistory(params = {}) {
     if (params.search) query.set('search', params.search);
     query.set('_t', Date.now());
 
-    const res = await fetch(`${API_BASE}/history?${query.toString()}`, {
+    const res = await fetchWithTimeout(`${API_BASE}/history?${query.toString()}`, {
       cache: 'no-store',
       headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' }
     });
@@ -238,7 +258,7 @@ export async function fetchHistory(params = {}) {
 
 export async function evaluateBypassAdvisor(payload) {
   try {
-    const res = await fetch(`${API_BASE}/advisor`, {
+    const res = await fetchWithTimeout(`${API_BASE}/advisor`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
@@ -252,7 +272,7 @@ export async function evaluateBypassAdvisor(payload) {
 
 export async function simulateTrafficPrediction(payload) {
   try {
-    const res = await fetch(`${API_BASE}/predict`, {
+    const res = await fetchWithTimeout(`${API_BASE}/predict`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
@@ -266,7 +286,7 @@ export async function simulateTrafficPrediction(payload) {
 
 export async function fetchRoadSummary() {
   try {
-    const res = await fetch(`${API_BASE}/roads/summary`);
+    const res = await fetchWithTimeout(`${API_BASE}/roads/summary`);
     if (res.ok) {
       const json = await res.json();
       if (json && json.success) return json;
@@ -301,7 +321,7 @@ export async function fetchRoadSummary() {
 
 export async function fetchLiveWeather() {
   try {
-    const res = await fetch(`${API_BASE}/weather`);
+    const res = await fetchWithTimeout(`${API_BASE}/weather`);
     if (res.ok) {
       const json = await res.json();
       if (json && json.success) return json.data;
@@ -322,7 +342,7 @@ export async function fetchLiveWeather() {
 
 export async function fetchEngineStatus() {
   try {
-    const res = await fetch(`${API_BASE}/engine-status`);
+    const res = await fetchWithTimeout(`${API_BASE}/engine-status`);
     if (res.ok) {
       const json = await res.json();
       if (json && json.success) return json.data;
@@ -352,7 +372,7 @@ export async function fetchEngineStatus() {
 
 export async function predictJourneyApi(payload) {
   try {
-    const res = await fetch(`${API_BASE}/predict-journey`, {
+    const res = await fetchWithTimeout(`${API_BASE}/predict-journey`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
@@ -371,9 +391,22 @@ export async function predictJourneyApi(payload) {
   return predictJourneyTraffic(payload);
 }
 
+export async function fetchBusesBetween(from, to) {
+  try {
+    const res = await fetchWithTimeout(`${API_BASE}/buses?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`);
+    if (res.ok) {
+      const json = await res.json();
+      if (json && json.success) return json;
+    }
+  } catch (err) {
+    console.warn('[API] /api/buses fetch error:', err.message);
+  }
+  return null;
+}
+
 export async function measureExactRoadRoute(origin, destination) {
   try {
-    const res = await fetch(`${API_BASE}/measure-route`, {
+    const res = await fetchWithTimeout(`${API_BASE}/measure-route`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ origin, destination })

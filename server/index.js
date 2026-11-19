@@ -1,5 +1,6 @@
 import express from 'express';
 import cors from 'cors';
+import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
@@ -17,6 +18,7 @@ import {
 } from './trafficService.js';
 import { NODE_COORDINATES, DHAKA_BYPASS_WAYPOINTS, haversineKm } from './routesConfig.js';
 import { buildOsmRouteGeometry } from './osmRouter.js';
+import { getAllBuses, getBusById, getBusStops, findBusesBetween } from './busService.js';
 
 // Resilient compression import (safe if module not present)
 let compression = null;
@@ -48,7 +50,26 @@ if (compression) {
   }));
 }
 
-app.use(cors());
+// CORS configuration: allow Firebase Hosting domain and localhost in dev
+const allowedOrigins = [
+  'http://localhost:3000',
+  'http://localhost:5000',
+  'http://127.0.0.1:3000',
+  // Replace with your actual Firebase project URL after deploying
+  'https://trafficpulse-dhaka.web.app',
+  'https://trafficpulse-dhaka.firebaseapp.com',
+];
+app.use(cors({
+  origin: (origin, callback) => {
+    // Allow requests with no origin (Render health checks, curl) or matching origins
+    if (!origin || allowedOrigins.some(o => origin.startsWith(o))) {
+      callback(null, true);
+    } else {
+      callback(null, true); // Keep permissive; tighten after confirming Firebase URL
+    }
+  },
+  credentials: true,
+}));
 app.use(express.json({ limit: '1mb' }));
 
 // Response timing and request logging middleware
@@ -154,8 +175,18 @@ app.get('/api/history', (req, res) => {
     const rawLimit = parseInt(req.query.limit, 10);
     const search = req.query.search ? req.query.search.toLowerCase() : '';
     const level = req.query.level;
+    const archiveFile = req.query.archive || req.query.file || null;
+    const fromDate = req.query.from_date || req.query.start_date || null;
+    const toDate = req.query.to_date || req.query.end_date || null;
 
-    let records = loadTrafficData();
+    let records = loadTrafficData(archiveFile);
+
+    if (fromDate) {
+      records = records.filter(r => String(r.timestamp || '') >= fromDate);
+    }
+    if (toDate) {
+      records = records.filter(r => String(r.timestamp || '') <= toDate + ' 23:59');
+    }
 
     if (level && level !== 'ALL') {
       records = records.filter(r => (r.traffic_level || '').toUpperCase() === level.toUpperCase());
@@ -184,6 +215,26 @@ app.get('/api/history', (req, res) => {
       totalPages: isAll ? 1 : Math.ceil(total / limit),
       data: paginated
     });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 5.0 List Available Historical CSV Datasets & Archives
+app.get('/api/archives', (req, res) => {
+  try {
+    const dataDir = path.resolve(__dirname, '../data');
+    const files = fs.readdirSync(dataDir).filter(f => f.endsWith('.csv'));
+    const archives = files.map(filename => {
+      const filePath = path.join(dataDir, filename);
+      const stat = fs.statSync(filePath);
+      return {
+        filename,
+        size_mb: Number((stat.size / (1024 * 1024)).toFixed(2)),
+        modified: stat.mtime
+      };
+    });
+    res.json({ success: true, count: archives.length, archives });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -391,6 +442,76 @@ app.post('/api/measure-route', async (req, res) => {
   }
 });
 
+// 7b3. Real-Time Road Geometry Provider for Transit & Bus Map
+const ROUTE_GEOM_SERVER_CACHE = new Map();
+
+app.get('/api/route-geometry', async (req, res) => {
+  try {
+    const { fromLat, fromLng, toLat, toLng, mode = 'driving' } = req.query;
+    if (!fromLat || !fromLng || !toLat || !toLng) {
+      return res.status(400).json({ success: false, error: 'Missing coordinates' });
+    }
+
+    const p1 = [parseFloat(fromLat), parseFloat(fromLng)];
+    const p2 = [parseFloat(toLat), parseFloat(toLng)];
+    const profile = mode === 'walking' || mode === 'foot' ? 'foot' : 'driving';
+    const cacheKey = `${profile}_${p1[0].toFixed(4)},${p1[1].toFixed(4)}_${p2[0].toFixed(4)},${p2[1].toFixed(4)}`;
+
+    if (ROUTE_GEOM_SERVER_CACHE.has(cacheKey)) {
+      res.setHeader('Cache-Control', 'public, max-age=86400');
+      return res.json({ success: true, from_cache: true, coordinates: ROUTE_GEOM_SERVER_CACHE.get(cacheKey) });
+    }
+
+    let coords = null;
+
+    // 1. Try OSM Germany routed engine with fast 1200ms timeout
+    try {
+      const svc = profile === 'foot' ? 'routed-foot' : 'routed-car';
+      const profName = profile === 'foot' ? 'foot' : 'driving';
+      const url = `https://routing.openstreetmap.de/${svc}/route/v1/${profName}/${p1[1]},${p1[0]};${p2[1]},${p2[0]}?overview=full&geometries=geojson`;
+      const r = await fetch(url, { signal: AbortSignal.timeout(1200) });
+      if (r.ok) {
+        const j = await r.json();
+        if (j?.routes?.[0]?.geometry?.coordinates?.length >= 2) {
+          coords = j.routes[0].geometry.coordinates.map(([lon, lat]) => [lat, lon]);
+        }
+      }
+    } catch (_) {}
+
+    // 2. Try Project-OSRM public engine with fast 1200ms timeout
+    if (!coords) {
+      try {
+        const url = `https://router.project-osrm.org/route/v1/${profile}/${p1[1]},${p1[0]};${p2[1]},${p2[0]}?overview=full&geometries=geojson`;
+        const r = await fetch(url, { signal: AbortSignal.timeout(1200) });
+        if (r.ok) {
+          const j = await r.json();
+          if (j?.routes?.[0]?.geometry?.coordinates?.length >= 2) {
+            coords = j.routes[0].geometry.coordinates.map(([lon, lat]) => [lat, lon]);
+          }
+        }
+      } catch (_) {}
+    }
+
+    // 3. Guaranteed instant local Dhaka GeoJSON road graph A* (2,805 road segments)
+    if (!coords || coords.length < 2) {
+      const osmRoute = buildOsmRouteGeometry([p1, p2]);
+      if (osmRoute.coordinates && osmRoute.coordinates.length >= 2) {
+        coords = osmRoute.coordinates;
+      }
+    }
+
+    if (coords && coords.length >= 2) {
+      ROUTE_GEOM_SERVER_CACHE.set(cacheKey, coords);
+      res.setHeader('Cache-Control', 'public, max-age=86400');
+      return res.json({ success: true, coordinates: coords });
+    }
+
+    return res.status(500).json({ success: false, error: 'Could not resolve road geometry' });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // 7c. Live Weather from OpenWeatherMap API
 app.get('/api/weather', async (req, res) => {
   try {
@@ -427,6 +548,42 @@ app.get('/api/corridors/osm-overlay', (req, res) => {
   try {
     const corridors = getMonitoredCorridorsOsmOverlay();
     res.json({ success: true, count: corridors.length, corridors });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 8c. Route-Wise Bus Network API (Dhaka Metropolitan Transit & DTCA Permitted Services)
+app.get('/api/buses', (req, res) => {
+  try {
+    const { from, to, ...rest } = req.query || {};
+    if (from && to) {
+      const matchResult = findBusesBetween(from, to);
+      return res.json({ success: true, ...matchResult });
+    }
+    const buses = getAllBuses(rest);
+    res.json({ success: true, count: buses.length, data: buses });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.get('/api/buses/stops', (req, res) => {
+  try {
+    const stops = getBusStops();
+    res.json({ success: true, count: stops.length, data: stops });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.get('/api/buses/:id', (req, res) => {
+  try {
+    const bus = getBusById(req.params.id);
+    if (!bus) {
+      return res.status(404).json({ success: false, error: `Bus service '${req.params.id}' not found` });
+    }
+    res.json({ success: true, data: bus });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
