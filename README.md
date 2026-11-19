@@ -200,15 +200,15 @@ Render automatically builds and spins up the updated container!
 
 ---
 
-## 👥 Contributors & Authors
+## 👥 Authors
 
 Developed as an intelligent transportation system and predictive analytics project for Greater Dhaka:
 
-| Contributor | Role & GitHub |
+| Author | Role & GitHub |
 | :--- | :--- |
-| **Zannatul Farzana Maria** | Lead Contributor · [@maRia-1506A](https://github.com/maRia-1506A) |
-| **K. M. Fathum Mubin** | Co-Contributor · [@mubin25s](https://github.com/mubin25s) |
-| **Rakib Rohan** | Co-Contributor · [@Rakib255004](https://github.com/Rakib255004) |
+| **Zannatul Farzana Maria** | Author · [@maRia-1506A](https://github.com/maRia-1506A) |
+| **K. M. Fathum Mubin** | Author · [@mubin25s](https://github.com/mubin25s) |
+| **Rakib Rohan** | Author · [@Rakib255004](https://github.com/Rakib255004) |
 
 ---
 

@@ -179,7 +179,7 @@ export default function AboutPage() {
                   </svg>
                 </a>
                 <span className={`inline-block text-[10px] font-semibold px-2.5 py-0.5 rounded-full mt-1 border ${c.badgeColor}`}>
-                  Contributor
+                  Author
                 </span>
               </div>
             </div>
