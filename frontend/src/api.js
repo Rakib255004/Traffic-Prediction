@@ -6,14 +6,14 @@ import { NODE_COORDINATES, OFFICIAL_ROUTES, ALL_ROUTES, DHAKA_BYPASS_WAYPOINTS }
 
 // In production, calls go directly to the Render backend.
 // In development, Vite proxies /api to localhost:5000.
-const API_BASE = import.meta.env.PROD
+export const API_BASE = import.meta.env.PROD
   ? 'https://traffic-prediction-q1yl.onrender.com/api'
   : '/api';
 
 // Maximum time to wait for backend before falling back to local dataset (prevents infinite spinner during Render cold-start)
-const FETCH_TIMEOUT_MS = 6000;
+export const FETCH_TIMEOUT_MS = 6000;
 
-async function fetchWithTimeout(url, options = {}, timeoutMs = FETCH_TIMEOUT_MS) {
+export async function fetchWithTimeout(url, options = {}, timeoutMs = FETCH_TIMEOUT_MS) {
   const controller = new AbortController();
   const id = setTimeout(() => controller.abort(), timeoutMs);
   try {

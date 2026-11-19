@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { NODE_COORDINATES } from '../utils/dhakaRoutesData.js';
+import { API_BASE, fetchWithTimeout } from '../api.js';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const TRAFFIC_COLORS = {
@@ -167,7 +168,7 @@ export default function JourneyRouteMap({
   // ── 2. Fetch verified 50 official monitored corridors once ──────────────────
   useEffect(() => {
     let active = true;
-    fetch('/api/corridors/osm-overlay')
+    fetchWithTimeout(`${API_BASE}/corridors/osm-overlay`)
       .then(r => (r.ok ? r.json() : null))
       .then(json => {
         if (active && json?.success && Array.isArray(json.corridors)) {

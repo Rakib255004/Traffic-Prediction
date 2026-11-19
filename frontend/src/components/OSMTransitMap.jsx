@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { NODE_COORDINATES } from '../utils/dhakaRoutesData.js';
+import { API_BASE } from '../api.js';
 
 // ── In-Memory Geometry Cache for Instant Tab Switching ────────────────────────
 const GEOMETRY_CACHE = new Map();
@@ -465,7 +466,7 @@ async function fetchAccurateRoadGeometry(p1, p2, profile = 'driving') {
 
   // 1. Try Local Node Backend Geometry Provider (Zero CORS, 100% reliable) with robust 8s timeout
   try {
-    const backendUrl = `/api/route-geometry?fromLat=${p1[0]}&fromLng=${p1[1]}&toLat=${p2[0]}&toLng=${p2[1]}&mode=${profile}`;
+    const backendUrl = `${API_BASE}/route-geometry?fromLat=${p1[0]}&fromLng=${p1[1]}&toLat=${p2[0]}&toLng=${p2[1]}&mode=${profile}`;
     const res = await fetch(backendUrl, { signal: AbortSignal.timeout(8000) });
     if (res.ok) {
       const data = await res.json();
