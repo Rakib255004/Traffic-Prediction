@@ -249,6 +249,9 @@ function RouteRecordsList({ routes }) {
   );
 }
 
+// Module-level in-memory cache so switching tabs never shows a 8-10s loading spinner
+let cachedHistoryData = null;
+
 export default function TrafficInsights() {
   const CORRIDOR_PRESETS = {
     STANDARD: {
@@ -274,20 +277,20 @@ export default function TrafficInsights() {
     },
   };
 
-  const [records, setRecords]           = useState([]);
-  const [loading, setLoading]           = useState(true);
+  const [records, setRecords]           = useState(() => cachedHistoryData?.records || []);
+  const [loading, setLoading]           = useState(() => !cachedHistoryData);
   const [isSyncing, setIsSyncing]       = useState(false);
-  const [lastSynced, setLastSynced]     = useState(null);
-  const [autoSync, setAutoSync]         = useState(true);
-  const [syncIntervalSec, setSyncIntervalSec] = useState(20);
+  const [lastSynced, setLastSynced]     = useState(() => cachedHistoryData?.lastSynced || null);
+  const [autoSync, setAutoSync]         = useState(false);
+  const [syncIntervalSec, setSyncIntervalSec] = useState(120);
   const [error, setError]               = useState(null);
-  const [totalRecords, setTotalRecords] = useState(0);
-  const [isOffline, setIsOffline]       = useState(false);
+  const [totalRecords, setTotalRecords] = useState(() => cachedHistoryData?.total || 0);
+  const [isOffline, setIsOffline]       = useState(() => cachedHistoryData?.isOffline || false);
   const [peakSortMode, setPeakSortMode] = useState('volume'); // 'volume' | 'severity'
   const [corridorThresholdPreset, setCorridorThresholdPreset] = useState('STANDARD');
 
   const loadData = async (isInitial = false) => {
-    if (isInitial) {
+    if (isInitial && !cachedHistoryData) {
       setLoading(true);
     } else {
       setIsSyncing(true);
@@ -296,18 +299,30 @@ export default function TrafficInsights() {
     try {
       const res = await fetchHistory({ page: 1, limit: 10000, all: true });
       if (res && res.success) {
-        setRecords(res.data || []);
-        setTotalRecords(res.total || res.data?.length || 0);
-        setIsOffline(Boolean(res.isOffline));
-        setLastSynced(new Date());
+        const recs = res.data || [];
+        const tot = res.total || recs.length || 0;
+        const off = Boolean(res.isOffline);
+        const now = new Date();
+
+        cachedHistoryData = {
+          records: recs,
+          total: tot,
+          isOffline: off,
+          lastSynced: now,
+        };
+
+        setRecords(recs);
+        setTotalRecords(tot);
+        setIsOffline(off);
+        setLastSynced(now);
       }
     } catch (e) {
       console.warn('History load error:', e);
-      if (isInitial) {
+      if (isInitial && !cachedHistoryData) {
         setError('Could not load historical data. Make sure the backend server is running.');
       }
     } finally {
-      if (isInitial) setLoading(false);
+      setLoading(false);
       setIsSyncing(false);
     }
   };
