@@ -1,103 +1,342 @@
-import React, { useState, useEffect } from 'react';
-import {
-  Calendar,
-  Clock,
-  MapPin,
-  ArrowRight,
-  ArrowRightLeft,
-  CheckCircle2,
-  Flame,
-  ShieldCheck,
-  Zap,
-  Navigation,
-  Sparkles,
-  Heart,
-  Compass,
-  Car,
-  Info,
-  CloudSun,
-  ExternalLink,
-  Layers,
-  Droplets,
-  Eye
-} from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
 import { ALL_DHAKA_LOCATIONS } from '../utils/journeyPredictor.js';
-import { predictJourneyApi, fetchLiveWeather, fetchEngineStatus } from '../api.js';
+import { predictJourneyApi, evaluateRlNow, fetchRlStatus } from '../api.js';
 import JourneyRouteMap from './JourneyRouteMap.jsx';
 
-export default function TrafficJourneyPredictor({ onExploreCorridors, onOpenMap }) {
-  // Form State
-  const todayStr = new Date().toISOString().split('T')[0];
-  const [selectedDate, setSelectedDate] = useState(todayStr);
-  const [selectedTime, setSelectedTime] = useState('09:00');
-  const [fromLocation, setFromLocation] = useState('Mirpur 10');
-  const [toLocation, setToLocation] = useState('Farmgate');
+// ── Helpers ───────────────────────────────────────────────────────────────────
+const getDayName = (dateStr) => {
+  if (!dateStr) return 'Today';
+  const d = new Date(dateStr + 'T12:00:00');
+  return isNaN(d.getTime()) ? 'Today' : d.toLocaleDateString('en-US', { weekday: 'long' });
+};
 
-  // Interactive UI State
+const LEVEL_CONFIG = {
+  High: { bg: 'bg-red-50', border: 'border-red-200', badge: 'bg-red-500 text-white', dot: 'bg-red-500', label: 'High Traffic', desc: 'Severe congestion expected. Allow extra time.' },
+  Medium: { bg: 'bg-amber-50', border: 'border-amber-200', badge: 'bg-amber-400 text-white', dot: 'bg-amber-400', label: 'Moderate Traffic', desc: 'Moderate delays likely. Plan accordingly.' },
+  Low: { bg: 'bg-green-50', border: 'border-green-200', badge: 'bg-green-500 text-white', dot: 'bg-green-500', label: 'Low Traffic', desc: 'Roads are flowing freely. Good time to travel.' },
+};
+
+const SEGMENT_TRAFFIC_STYLES = {
+  Low: 'bg-green-50 text-green-700 border-green-200',
+  Medium: 'bg-amber-50 text-amber-700 border-amber-200',
+  High: 'bg-red-50 text-red-700 border-red-200',
+};
+
+function RoutePathSection({ steps = [], checkpoints = [], roadSegments = [] }) {
+  // Construct clean, deduplicated chronological steps including intermediate waypoints
+  const effectiveSteps = (() => {
+    if (Array.isArray(steps) && steps.length > 2) return steps;
+    const fromName = steps[0] || 'Origin';
+    const toName = steps[steps.length - 1] || 'Destination';
+    const middle = (checkpoints || [])
+      .map(c => c.name)
+      .filter(n => n && n.toLowerCase() !== fromName.toLowerCase() && n.toLowerCase() !== toName.toLowerCase());
+    return [fromName, ...middle, toName];
+  })();
+
+  if (!effectiveSteps.length) return null;
+
+  const intermediateWaypoints = effectiveSteps.slice(1, -1);
+
+  const telemetrySegments = [];
+  if (Array.isArray(roadSegments)) {
+    for (const seg of roadSegments) {
+      if (!seg?.observed_telemetry?.level || !seg?.name) continue;
+      const prev = telemetrySegments[telemetrySegments.length - 1];
+      if (prev && prev.name === seg.name && prev.level === seg.observed_telemetry.level) continue;
+      telemetrySegments.push({
+        name: seg.name,
+        level: seg.observed_telemetry.level,
+        speedKmh: seg.observed_telemetry.speed_kmh,
+      });
+    }
+  }
+
+  return (
+    <div className="bg-white rounded-xl border border-blue-100 p-4 space-y-3.5 shadow-xs">
+      {/* 1. Step-by-Step Route Sequence */}
+      <div>
+        <div className="flex items-center justify-between mb-2">
+          <p className="text-xs font-bold text-slate-700 uppercase tracking-wide">
+            Route Path (Step-by-Step Sequence)
+          </p>
+          <span className="text-[11px] text-slate-500 font-medium">
+            {effectiveSteps.length} stops ({intermediateWaypoints.length} intermediate waypoints)
+          </span>
+        </div>
+        <div className="flex flex-wrap items-center gap-1.5 text-sm">
+          {effectiveSteps.map((step, idx) => {
+            const isStart = idx === 0;
+            const isEnd = idx === effectiveSteps.length - 1;
+            const label = isStart
+              ? (/\(Start\)$/i.test(step) ? step : `${step} (Start)`)
+              : isEnd
+                ? (/\(Destination\)$/i.test(step) ? step : `${step} (Destination)`)
+                : step;
+            return (
+              <React.Fragment key={idx}>
+                <span className={`px-2.5 py-1 rounded-lg text-xs font-semibold shadow-2xs ${isStart
+                  ? 'bg-green-100 text-green-800 border border-green-300'
+                  : isEnd
+                    ? 'bg-red-100 text-red-800 border border-red-300'
+                    : 'bg-blue-100 text-blue-800 border border-blue-200'
+                  }`}>
+                  {label}
+                </span>
+                {!isEnd && (
+                  <svg className="w-3.5 h-3.5 text-slate-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" />
+                  </svg>
+                )}
+              </React.Fragment>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* 2. Intermediate Waypoints Detail List */}
+      {intermediateWaypoints.length > 0 && (
+        <div className="pt-2.5 border-t border-slate-100">
+          <p className="text-[11px] font-bold text-slate-600 mb-1.5 uppercase tracking-wide">
+            Intermediate Waypoints & Flyovers along Route
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
+            {intermediateWaypoints.map((wp, i) => (
+              <div
+                key={i}
+                className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-slate-50 border border-slate-200 text-xs text-slate-700"
+              >
+                <span className="w-4 h-4 rounded-full bg-blue-600 text-white font-bold text-[10px] flex items-center justify-center shrink-0">
+                  {i + 1}
+                </span>
+                <span className="font-semibold truncate">{wp}</span>
+                <span className="ml-auto text-[10px] text-slate-500 font-medium">Waypoint</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* 3. Observed Segment Traffic (Historical CSV Telemetry) */}
+      {telemetrySegments.length > 0 && (
+        <div className="pt-2.5 border-t border-slate-100">
+          <p className="text-[11px] font-bold text-slate-600 mb-1.5 uppercase tracking-wide">
+            Observed Road Segment Telemetry (Historical Sensor Baseline)
+          </p>
+          <div className="flex flex-wrap gap-1.5">
+            {telemetrySegments.map((seg, idx) => (
+              <span
+                key={`${seg.name}-${idx}`}
+                className={`px-2.5 py-1 rounded-md text-[11px] font-semibold border ${SEGMENT_TRAFFIC_STYLES[seg.level] || 'bg-slate-50 text-slate-700 border-slate-200'
+                  }`}
+              >
+                {seg.name}: <span className="underline">{seg.level}</span>{seg.speedKmh ? ` · ${seg.speedKmh} km/h` : ''}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Component ─────────────────────────────────────────────────────────────────
+export default function TrafficJourneyPredictor() {
+  const todayStr = new Date().toISOString().split('T')[0];
+  const timePickerRef = useRef(null);
+  const timeTriggerRef = useRef(null);
+  const hourInputRef = useRef(null);
+  const minuteInputRef = useRef(null);
+
+  // Form state — empty by default so user must choose
+  const [selectedDate, setSelectedDate] = useState('');
+  const [selectedTime, setSelectedTime] = useState('');
+  const [fromLocation, setFromLocation] = useState('');
+  const [toLocation, setToLocation] = useState('');
+
+  // Custom time picker state
+  const [timePickerOpen, setTimePickerOpen] = useState(false);
+  const [pickerHour, setPickerHour] = useState('12');
+  const [pickerMinute, setPickerMinute] = useState('00');
+  const [pickerAmPm, setPickerAmPm] = useState('AM');
+
+  // Close picker when clicking outside
+  useEffect(() => {
+    const handler = (e) => {
+      if (timePickerRef.current && !timePickerRef.current.contains(e.target)) {
+        setTimePickerOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  const openTimePicker = () => {
+    setTimePickerOpen(prev => {
+      const next = !prev;
+      if (next && selectedTime) {
+        const [h, m] = selectedTime.split(':').map(Number);
+        setPickerAmPm(h >= 12 ? 'PM' : 'AM');
+        setPickerHour(String(h % 12 || 12).padStart(2, '0'));
+        setPickerMinute(String(m).padStart(2, '0'));
+      }
+      return next;
+    });
+  };
+
+  const clampHour = (val) => {
+    const num = parseInt(val, 10);
+    if (isNaN(num) || num < 1) return '12';
+    if (num > 12) return '12';
+    return String(num).padStart(2, '0');
+  };
+
+  const clampMinute = (val) => {
+    const num = parseInt(val, 10);
+    if (isNaN(num) || num < 0) return '00';
+    if (num > 59) return '59';
+    return String(num).padStart(2, '0');
+  };
+
+  const handleTimeOk = () => {
+    const h = clampHour(pickerHour);
+    const m = clampMinute(pickerMinute);
+    setPickerHour(h);
+    setPickerMinute(m);
+    // Convert to 24h for internal value
+    let hour24 = parseInt(h, 10);
+    if (pickerAmPm === 'PM' && hour24 !== 12) hour24 += 12;
+    if (pickerAmPm === 'AM' && hour24 === 12) hour24 = 0;
+    const time24 = `${String(hour24).padStart(2, '0')}:${m}`;
+    setSelectedTime(time24);
+    setTimePickerOpen(false);
+    timeTriggerRef.current?.focus();
+  };
+
+  const handleTimeClear = () => {
+    setPickerHour('12'); setPickerMinute('00'); setPickerAmPm('AM');
+    setSelectedTime('');
+    setTimePickerOpen(false);
+    timeTriggerRef.current?.focus();
+  };
+
+  const handleTimePickerKeyDown = (e) => {
+    if (!timePickerOpen) return;
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      e.stopPropagation();
+      handleTimeOk();
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      e.stopPropagation();
+      setTimePickerOpen(false);
+      timeTriggerRef.current?.focus();
+    } else if (e.key === 'a' || e.key === 'A') {
+      e.preventDefault();
+      setPickerAmPm('AM');
+    } else if (e.key === 'p' || e.key === 'P') {
+      e.preventDefault();
+      setPickerAmPm('PM');
+    }
+  };
+
+  const setQuickTime = (time24) => {
+    setSelectedTime(time24);
+    const [h, m] = time24.split(':').map(Number);
+    const ampm = h >= 12 ? 'PM' : 'AM';
+    const h12 = h % 12 || 12;
+    setPickerHour(String(h12).padStart(2, '0'));
+    setPickerMinute(String(m).padStart(2, '0'));
+    setPickerAmPm(ampm);
+    setTimePickerOpen(false);
+  };
+
+  // Format display time (24h → 12h display)
+  const formatDisplayTime = (t) => {
+    if (!t) return '';
+    const [h, m] = t.split(':').map(Number);
+    const ampm = h >= 12 ? 'PM' : 'AM';
+    const h12 = h % 12 || 12;
+    return `${String(h12).padStart(2, '0')}:${String(m).padStart(2, '0')} ${ampm}`;
+  };
+
+  // UI state
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
-  const [alternativeChoice, setAlternativeChoice] = useState(null); // null, 'yes', 'no'
-  const [liveWeather, setLiveWeather] = useState(null);
-  const [engineStatus, setEngineStatus] = useState(null);
-  const [showMapVisualizer, setShowMapVisualizer] = useState(true);
+  const [error, setError] = useState(null);
+  const [selectedAltIndex, setSelectedAltIndex] = useState('primary');
+  const [formError, setFormError] = useState('');
+  const [isVerifyingRl, setIsVerifyingRl] = useState(false);
+  const [verifyResult, setVerifyResult] = useState(null);
 
-  // Popular Quick Select Presets
-  const popularOrigins = ['Mirpur 10', 'Uttara', 'ECB Chattor', 'Dhanmondi', 'Savar', 'Gabtoli'];
-  const popularDestinations = ['Farmgate', 'Motijheel', 'Gabtoli', 'Science Lab', 'Gulshan 2', 'Airport'];
+  const handleVerifyNow = async () => {
+    setIsVerifyingRl(true);
+    try {
+      const predPayload = result ? {
+        from: result.from,
+        to: result.to,
+        origCoords: result.primary_route?.origin_coords,
+        destCoords: result.primary_route?.dest_coords,
+        predictedTimeMin: result.primary_route?.travel_time_min,
+        predictedSpeedKmh: result.primary_route?.speed_kmh,
+        predictedLevel: result.traffic_prediction,
+        corridorKey: result.reinforcement_learning?.corridor_key || result.primary_route?.route_code,
+        hour: selectedTime ? Number(selectedTime.split(':')[0]) : new Date().getHours(),
+        day: result.day || 'Friday',
+      } : null;
 
-  // Quick Time Presets
-  const timePresets = [
-    { label: 'Morning Peak', time: '08:30', desc: 'Rush' },
-    { label: 'Midday', time: '14:00', desc: 'Regular' },
-    { label: 'Evening Peak', time: '18:30', desc: 'Heavy' },
-    { label: 'Night Flow', time: '22:30', desc: 'Clear' }
-  ];
-
-  // Derive day of week for current selected date
-  const getDayName = (dateStr) => {
-    if (!dateStr) return 'Today';
-    const d = new Date(dateStr + 'T12:00:00');
-    return isNaN(d.getTime())
-      ? 'Today'
-      : d.toLocaleDateString('en-US', { weekday: 'long' });
+      const res = await evaluateRlNow(predPayload, 5);
+      if (res) {
+        setVerifyResult(res);
+      }
+    } catch (e) {
+      console.warn('Error verifying RL:', e);
+    } finally {
+      setIsVerifyingRl(false);
+    }
   };
 
   const dayName = getDayName(selectedDate);
   const isWeekendDay = dayName === 'Friday' || dayName === 'Saturday';
 
-  // Load Live Telemetry (OpenWeatherMap + Google API Engine Status)
-  useEffect(() => {
-    const loadApiTelemetry = async () => {
-      try {
-        const [wData, eData] = await Promise.all([
-          fetchLiveWeather(),
-          fetchEngineStatus()
-        ]);
-        if (wData) setLiveWeather(wData);
-        if (eData) setEngineStatus(eData);
-      } catch (e) {
-        console.warn('Could not load background API telemetry:', e.message);
-      }
-    };
-    loadApiTelemetry();
-  }, []);
+  // Quick date helpers
+  const setToday = () => setSelectedDate(new Date().toISOString().split('T')[0]);
+  const setTomorrow = () => {
+    const d = new Date(); d.setDate(d.getDate() + 1);
+    setSelectedDate(d.toISOString().split('T')[0]);
+  };
 
-  // Swap From and To
+  // Swap origin / destination
   const handleSwap = () => {
     setFromLocation(toLocation);
     setToLocation(fromLocation);
-    if (result) {
-      setAlternativeChoice(null);
-    }
+    setResult(null);
+    setSelectedAltIndex('primary');
   };
 
-  // Submit Handler
+  // Validate + submit
   const handleSubmit = async (e) => {
     if (e) e.preventDefault();
-    if (!fromLocation || !toLocation) return;
+
+    // If time picker is open, Enter must confirm the selected time instead of submitting
+    if (timePickerOpen) {
+      handleTimeOk();
+      return;
+    }
+    if (loading) return;
+
+    setFormError('');
+
+    if (!selectedDate) { setFormError('Please select a travel date.'); return; }
+    if (!selectedTime) { setFormError('Please select a travel time.'); return; }
+    if (!fromLocation) { setFormError('Please select a starting location.'); return; }
+    if (!toLocation) { setFormError('Please select a destination.'); return; }
+    if (fromLocation === toLocation) { setFormError('Origin and destination cannot be the same.'); return; }
 
     setLoading(true);
-    setAlternativeChoice(null);
+    setResult(null);
+    setError(null);
+    setSelectedAltIndex('primary');
 
     try {
       const data = await predictJourneyApi({
@@ -105,341 +344,330 @@ export default function TrafficJourneyPredictor({ onExploreCorridors, onOpenMap 
         day: dayName,
         time: selectedTime,
         from: fromLocation,
-        to: toLocation
+        to: toLocation,
       });
 
       setResult(data);
-      if (data.weather_live) {
-        setLiveWeather(data.weather_live);
-      }
     } catch (err) {
-      console.error('Prediction failed:', err);
+      setError('Could not get prediction. Please check if the server is running.');
     } finally {
       setLoading(false);
     }
   };
 
-  // Auto-run initial prediction on mount
-  useEffect(() => {
-    handleSubmit();
-  }, []);
-
-  // Quick Date Setters
-  const setQuickDate = (offsetDays) => {
-    const d = new Date();
-    d.setDate(d.getDate() + offsetDays);
-    setSelectedDate(d.toISOString().split('T')[0]);
-  };
-
-  const setNextFriday = () => {
-    const d = new Date();
-    const day = d.getDay();
-    const diff = (5 - day + 7) % 7 || 7;
-    d.setDate(d.getDate() + diff);
-    setSelectedDate(d.toISOString().split('T')[0]);
-  };
+  const cfg = result ? (LEVEL_CONFIG[result.traffic_prediction] || LEVEL_CONFIG.Low) : null;
+  const altList = result?.alternative_routes?.length
+    ? result.alternative_routes
+    : result?.alternative_route
+      ? [result.alternative_route]
+      : [];
+  const activeAltCardIdx = typeof selectedAltIndex === 'number' ? selectedAltIndex : 0;
+  const activeAlt = altList[activeAltCardIdx] || result?.alternative_route || null;
+  const ALT_ROUTE_COLORS = ['#7c3aed', '#0d9488', '#ea580c']; // Purple, Teal, Orange
 
   return (
-    <div className="space-y-6">
-      {/* 1. Live Weather & Multi-Key API Engine Status Bar */}
-      <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-3.5 backdrop-blur-md shadow-lg flex flex-wrap items-center justify-between gap-3 text-xs">
-        {/* OpenWeatherMap Live Bar */}
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2 text-amber-400 font-bold bg-amber-950/60 border border-amber-800/60 px-3 py-1.5 rounded-xl">
-            <CloudSun className="w-4 h-4" />
-            <span>OpenWeatherMap Live:</span>
-            <span className="text-white font-extrabold">{liveWeather?.temperature_c || 25}°C</span>
-            <span className="text-amber-300 font-normal">({liveWeather?.condition || 'Haze'})</span>
-          </div>
+    <div className="space-y-8">
 
-          <div className="hidden sm:flex items-center gap-3 text-slate-300">
-            <span className="flex items-center gap-1 text-[11px] text-slate-400">
-              <Droplets className="w-3.5 h-3.5 text-cyan-400" />
-              <span>Humidity: {liveWeather?.humidity_pct || 75}%</span>
-            </span>
-            <span className="flex items-center gap-1 text-[11px] text-slate-400">
-              <Eye className="w-3.5 h-3.5 text-emerald-400" />
-              <span>Vis: {liveWeather?.visibility_km || 7} km</span>
-            </span>
-            <span className="flex items-center gap-1 text-[11px] text-slate-300 bg-slate-950 px-2 py-0.5 rounded-lg border border-slate-800">
-              <span>Road: </span>
-              <strong className="text-emerald-400">{liveWeather?.surface_condition || 'Dry Surface'}</strong>
-            </span>
-          </div>
-        </div>
-
-        {/* Google Maps Multi-Key Engine Status */}
-        <div className="flex items-center gap-2.5">
-          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-950 border border-slate-800 text-[11px]">
-            <span className="inline-block w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-            <span className="text-slate-300 font-medium">Google Maps Routes API v2:</span>
-            <span className="text-emerald-400 font-bold">Multi-Key Pool Active</span>
-          </div>
-        </div>
+      {/* ── Page Title ─────────────────────────────────────────────────────── */}
+      <div className="text-center space-y-2">
+        <h1 className="text-2xl sm:text-3xl font-bold text-slate-800">Plan Your Journey</h1>
+        <p className="text-slate-500 text-sm">
+          Enter your travel details to predict traffic conditions across Dhaka.
+        </p>
       </div>
 
-      {/* 2. Hero Welcome Banner */}
-      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-slate-900 via-slate-900/90 to-cyan-950/40 border border-slate-800 p-6 md:p-8 shadow-2xl backdrop-blur-xl">
-        <div className="relative z-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
-          <div className="space-y-2">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-cyan-950/90 border border-cyan-800/80 text-cyan-300 text-xs font-semibold">
-              <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
-              <span>Google Maps Routes API + OpenWeatherMap Real-Time Telemetry</span>
-            </div>
-            <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
-              Dhaka Traffic Journey Predictor & Jam Bypass
-            </h1>
-            <p className="text-xs sm:text-sm text-slate-300 max-w-2xl leading-relaxed">
-              Plan your route across Greater Dhaka. Input your{' '}
-              <strong className="text-cyan-400">Day / Date</strong>,{' '}
-              <strong className="text-cyan-400">Time</strong>,{' '}
-              <strong className="text-cyan-400">From</strong>, and{' '}
-              <strong className="text-cyan-400">To</strong> to predict traffic conditions (High, Low, Medium) and discover fastest alternative bypasses.
-            </p>
-          </div>
+      {/* ── Prediction Form ────────────────────────────────────────────────── */}
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 sm:p-8">
+        <form onSubmit={handleSubmit} noValidate>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 relative">
 
-          <div className="flex items-center gap-3 self-stretch md:self-auto bg-slate-950/80 border border-slate-800 p-3.5 rounded-2xl">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-cyan-600 to-emerald-500 flex items-center justify-center text-white shadow-md shadow-cyan-500/20">
-              <Car className="w-5 h-5" />
-            </div>
-            <div className="text-xs">
-              <div className="font-bold text-white">50 Official Corridors</div>
-              <div className="text-slate-400">128 Dhaka Nodes & Flyovers</div>
-            </div>
-          </div>
-        </div>
-
-        {/* Ambient background decoration */}
-        <div className="absolute -top-24 -right-24 w-80 h-80 bg-cyan-500/10 rounded-full blur-3xl pointer-events-none"></div>
-        <div className="absolute -bottom-24 -left-24 w-80 h-80 bg-blue-500/10 rounded-full blur-3xl pointer-events-none"></div>
-      </div>
-
-      {/* 3. Main Prediction Input Form Card */}
-      <div className="bg-slate-900/70 border border-slate-800 rounded-3xl p-5 sm:p-7 backdrop-blur-md shadow-xl">
-        <div className="border-b border-slate-800 pb-4 mb-5 flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <Compass className="w-5 h-5 text-cyan-400" />
-            <h2 className="text-base font-bold text-white">Trip Parameters</h2>
-          </div>
-          <span className="text-xs text-slate-400">Specify journey schedule & points</span>
-        </div>
-
-        <form onSubmit={handleSubmit} className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            {/* Input 1: Day / Date */}
-            <div className="space-y-2">
-              <label className="flex items-center justify-between text-xs font-bold text-slate-300">
-                <span className="flex items-center gap-1.5">
-                  <Calendar className="w-3.5 h-3.5 text-cyan-400" />
-                  Day / Date
-                </span>
-                <span
-                  className={`text-[10px] px-2 py-0.5 rounded-md font-bold uppercase ${
-                    isWeekendDay
-                      ? 'bg-emerald-950 text-emerald-400 border border-emerald-800'
-                      : 'bg-blue-950 text-blue-300 border border-blue-800'
-                  }`}
-                >
-                  {dayName} {isWeekendDay ? '(Holiday)' : '(Weekday)'}
-                </span>
+            {/* Travel Date */}
+            <div className="space-y-1.5">
+              <label className="block text-sm font-medium text-slate-700">
+                Travel Date
               </label>
-              <div className="relative">
-                <input
-                  type="date"
-                  value={selectedDate}
-                  onChange={(e) => setSelectedDate(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-700/80 hover:border-slate-600 focus:border-cyan-500 rounded-xl px-3.5 py-2.5 text-xs text-white font-medium focus:outline-none transition shadow-inner"
-                  required
-                />
-              </div>
-
-              {/* Quick Day Chips */}
-              <div className="flex flex-wrap gap-1.5 pt-1">
-                <button
-                  type="button"
-                  onClick={() => setQuickDate(0)}
-                  className="text-[10px] px-2 py-0.5 rounded bg-slate-800/80 hover:bg-slate-700 text-slate-300 transition"
-                >
-                  Today
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setQuickDate(1)}
-                  className="text-[10px] px-2 py-0.5 rounded bg-slate-800/80 hover:bg-slate-700 text-slate-300 transition"
-                >
-                  Tomorrow
-                </button>
-                <button
-                  type="button"
-                  onClick={setNextFriday}
-                  className="text-[10px] px-2 py-0.5 rounded bg-emerald-950/70 hover:bg-emerald-900/80 text-emerald-300 border border-emerald-800/60 transition"
-                >
-                  Friday (Weekend)
-                </button>
-              </div>
+              <input
+                type="date"
+                value={selectedDate}
+                min={todayStr}
+                onChange={(e) => setSelectedDate(e.target.value)}
+                required
+                placeholder="Select date"
+                className={`w-full border border-slate-300 rounded-lg px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition ${!selectedDate ? 'text-slate-400' : 'text-slate-800'}`}
+              />
+              {selectedDate && dayName && (
+                <div className="flex pt-0.5">
+                  <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${isWeekendDay ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'
+                    }`}>
+                    {dayName}
+                  </span>
+                </div>
+              )}
             </div>
 
-            {/* Input 2: Time */}
-            <div className="space-y-2">
-              <label className="flex items-center justify-between text-xs font-bold text-slate-300">
-                <span className="flex items-center gap-1.5">
-                  <Clock className="w-3.5 h-3.5 text-cyan-400" />
-                  Time
-                </span>
-                <span className="text-[10px] font-mono text-cyan-400 font-bold">
-                  {selectedTime}
-                </span>
+            {/* Travel Time — custom picker */}
+            <div className="space-y-1.5 relative" ref={timePickerRef} onKeyDown={handleTimePickerKeyDown}>
+              <label className="block text-sm font-medium text-slate-700">
+                Travel Time
               </label>
-              <div className="relative">
-                <input
-                  type="time"
-                  value={selectedTime}
-                  onChange={(e) => setSelectedTime(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-700/80 hover:border-slate-600 focus:border-cyan-500 rounded-xl px-3.5 py-2.5 text-xs text-white font-mono font-medium focus:outline-none transition shadow-inner"
-                  required
-                />
+
+              {/* Display field + inline OK button when open */}
+              <div className="flex items-center gap-2">
+                <button
+                  ref={timeTriggerRef}
+                  type="button"
+                  onClick={openTimePicker}
+                  aria-expanded={timePickerOpen}
+                  aria-haspopup="dialog"
+                  className={`flex-1 text-left border border-slate-300 rounded-lg px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition bg-white flex items-center justify-between ${selectedTime ? 'text-slate-800' : 'text-slate-400'}`}
+                >
+                  <span>{selectedTime ? formatDisplayTime(selectedTime) : 'Select time'}</span>
+                  <svg className="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </button>
               </div>
 
-              {/* Quick Time Preset Chips */}
-              <div className="flex flex-wrap gap-1.5 pt-1">
-                {timePresets.map(tp => (
-                  <button
-                    key={tp.label}
-                    type="button"
-                    onClick={() => setSelectedTime(tp.time)}
-                    className={`text-[10px] px-2 py-0.5 rounded transition ${
-                      selectedTime === tp.time
-                        ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 font-bold'
-                        : 'bg-slate-800/80 hover:bg-slate-700 text-slate-300'
-                    }`}
-                  >
-                    {tp.label}
+              {/* Custom Time Picker dropdown with visible OK button beside controls */}
+              {timePickerOpen && (
+                <div
+                  role="dialog"
+                  aria-label="Select travel time"
+                  className="absolute left-0 right-0 sm:right-auto z-50 mt-1 bg-white border border-slate-200 rounded-xl shadow-lg p-3.5 sm:min-w-[305px]"
+                >
+                  <div className="flex items-center gap-2">
+                    {/* Hour (01-12) — keyboard typable + ArrowUp/Down */}
+                    <input
+                      ref={hourInputRef}
+                      type="text"
+                      inputMode="numeric"
+                      maxLength={3}
+                      autoFocus
+                      aria-label="Hour"
+                      value={pickerHour}
+                      onFocus={(e) => e.target.select()}
+                      onChange={(e) => {
+                        const raw = e.target.value.replace(/\D/g, '');
+                        if (raw === '') {
+                          setPickerHour('');
+                          return;
+                        }
+                        let digits = raw;
+                        if (digits.length > 2) {
+                          digits = digits.slice(-2);
+                        }
+                        const num = parseInt(digits, 10);
+                        if (digits.length === 2 && (num < 1 || num > 12)) {
+                          const latest = parseInt(digits[1], 10);
+                          digits = latest >= 1 ? String(latest) : '12';
+                        }
+                        setPickerHour(digits);
+                      }}
+                      onBlur={(e) => {
+                        const val = e.target.value.replace(/\D/g, '');
+                        setPickerHour(clampHour(val));
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'ArrowUp') {
+                          e.preventDefault();
+                          const cur = parseInt(pickerHour, 10) || 12;
+                          const next = (cur % 12) + 1;
+                          setPickerHour(String(next).padStart(2, '0'));
+                        } else if (e.key === 'ArrowDown') {
+                          e.preventDefault();
+                          const cur = parseInt(pickerHour, 10) || 12;
+                          const prev = cur <= 1 ? 12 : cur - 1;
+                          setPickerHour(String(prev).padStart(2, '0'));
+                        } else if (e.key === 'ArrowRight' || e.key === ':') {
+                          e.preventDefault();
+                          minuteInputRef.current?.focus();
+                          minuteInputRef.current?.select();
+                        }
+                      }}
+                      className="w-12 text-center border border-slate-300 rounded-lg px-2 py-1.5 text-sm font-semibold text-slate-800 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+
+                    <span className="text-slate-500 font-bold">:</span>
+
+                    {/* Minute (00-59) — keyboard typable + ArrowUp/Down */}
+                    <input
+                      ref={minuteInputRef}
+                      type="text"
+                      inputMode="numeric"
+                      maxLength={3}
+                      aria-label="Minute"
+                      value={pickerMinute}
+                      onFocus={(e) => e.target.select()}
+                      onChange={(e) => {
+                        const raw = e.target.value.replace(/\D/g, '');
+                        if (raw === '') {
+                          setPickerMinute('');
+                          return;
+                        }
+                        let digits = raw;
+                        if (digits.length > 2) {
+                          digits = digits.slice(-2);
+                        }
+                        const num = parseInt(digits, 10);
+                        if (num > 59) {
+                          const latest = parseInt(digits[1], 10);
+                          digits = String(latest);
+                        }
+                        setPickerMinute(digits);
+                      }}
+                      onBlur={(e) => {
+                        const val = e.target.value.replace(/\D/g, '');
+                        setPickerMinute(clampMinute(val));
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'ArrowUp') {
+                          e.preventDefault();
+                          const next = ((parseInt(pickerMinute, 10) || 0) + 1) % 60;
+                          setPickerMinute(String(next).padStart(2, '0'));
+                        } else if (e.key === 'ArrowDown') {
+                          e.preventDefault();
+                          const cur = parseInt(pickerMinute, 10) || 0;
+                          const prev = cur <= 0 ? 59 : cur - 1;
+                          setPickerMinute(String(prev).padStart(2, '0'));
+                        } else if (e.key === 'ArrowLeft') {
+                          e.preventDefault();
+                          hourInputRef.current?.focus();
+                          hourInputRef.current?.select();
+                        }
+                      }}
+                      className="w-12 text-center border border-slate-300 rounded-lg px-2 py-1.5 text-sm font-semibold text-slate-800 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+
+                    {/* AM / PM toggle */}
+                    <div className="flex rounded-lg border border-slate-300 overflow-hidden shrink-0">
+                      {['AM', 'PM'].map(period => (
+                        <button
+                          key={period}
+                          type="button"
+                          onClick={() => setPickerAmPm(period)}
+                          className={`px-2 py-1.5 text-xs font-semibold transition ${pickerAmPm === period
+                            ? 'bg-blue-600 text-white'
+                            : 'bg-white text-slate-600 hover:bg-slate-50'
+                            }`}
+                        >
+                          {period}
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* Clearly visible OK button immediately beside the controls */}
+                    <button
+                      type="button"
+                      onClick={handleTimeOk}
+                      className="ml-auto px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold shadow-sm transition shrink-0"
+                    >
+                      OK
+                    </button>
+                  </div>
+
+                  {/* Footer */}
+                  <div className="flex items-center justify-between border-t border-slate-100 mt-3 pt-2">
+                    <button
+                      type="button"
+                      onClick={handleTimeClear}
+                      className="text-xs text-slate-500 hover:text-slate-700 transition"
+                    >
+                      Clear
+                    </button>
+                    <span className="text-[11px] text-slate-400">
+                      Press Enter or click OK
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {/* Quick picks */}
+              <div className="flex gap-2 pt-0.5">
+                {[['08:30', 'Morning Peak'], ['14:00', 'Midday'], ['18:30', 'Evening Peak']].map(([t, l]) => (
+                  <button key={t} type="button" onClick={() => setQuickTime(t)}
+                    className={`text-xs px-2 py-0.5 rounded-full border transition ${selectedTime === t
+                      ? 'bg-blue-600 text-white border-blue-600'
+                      : 'border-slate-200 text-slate-500 hover:border-blue-400 hover:text-blue-600'
+                      }`}>
+                    {l}
                   </button>
                 ))}
               </div>
             </div>
 
-            {/* Input 3: From (Origin) */}
-            <div className="space-y-2">
-              <label className="flex items-center justify-between text-xs font-bold text-slate-300">
-                <span className="flex items-center gap-1.5">
-                  <MapPin className="w-3.5 h-3.5 text-emerald-400" />
-                  From (Origin)
-                </span>
-                <span className="text-[10px] text-emerald-400 font-semibold truncate max-w-[120px]">
-                  {fromLocation}
-                </span>
+            {/* From */}
+            <div className="space-y-1.5">
+              <label className="block text-sm font-medium text-slate-700">
+                From (Origin)
               </label>
-              <div className="relative">
-                <select
-                  value={fromLocation}
-                  onChange={(e) => setFromLocation(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-700/80 hover:border-slate-600 focus:border-cyan-500 rounded-xl px-3 py-2.5 text-xs text-white font-medium focus:outline-none transition cursor-pointer shadow-inner"
-                >
-                  {ALL_DHAKA_LOCATIONS.map(loc => (
-                    <option key={loc} value={loc} className="bg-slate-900 text-white">
-                      {loc}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Quick Origin Chips */}
-              <div className="flex flex-wrap gap-1 pt-1">
-                {popularOrigins.slice(0, 4).map(loc => (
-                  <button
-                    key={loc}
-                    type="button"
-                    onClick={() => setFromLocation(loc)}
-                    className={`text-[10px] px-2 py-0.5 rounded transition ${
-                      fromLocation === loc
-                        ? 'bg-emerald-950 text-emerald-300 border border-emerald-700 font-bold'
-                        : 'bg-slate-800/60 hover:bg-slate-700 text-slate-400'
-                    }`}
-                  >
-                    {loc}
-                  </button>
+              <select
+                value={fromLocation}
+                onChange={(e) => setFromLocation(e.target.value)}
+                className={`w-full border border-slate-300 rounded-lg px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition bg-white ${!fromLocation ? 'text-slate-400' : 'text-slate-800'}`}
+              >
+                <option value="" disabled>Select origin</option>
+                {ALL_DHAKA_LOCATIONS.map(loc => (
+                  <option key={loc} value={loc}>{loc}</option>
                 ))}
-              </div>
+              </select>
             </div>
 
-            {/* Input 4: To (Destination) */}
-            <div className="space-y-2">
+            {/* To */}
+            <div className="space-y-1.5">
               <div className="flex items-center justify-between">
-                <label className="flex items-center gap-1.5 text-xs font-bold text-slate-300">
-                  <Navigation className="w-3.5 h-3.5 text-rose-400" />
+                <label className="block text-sm font-medium text-slate-700">
                   To (Destination)
                 </label>
-                {/* Swap Button */}
-                <button
-                  type="button"
-                  onClick={handleSwap}
-                  title="Swap Origin and Destination"
-                  className="flex items-center gap-1 text-[10px] font-semibold text-cyan-400 hover:text-cyan-300 transition bg-slate-800/60 px-2 py-0.5 rounded border border-slate-700"
-                >
-                  <ArrowRightLeft className="w-3 h-3" />
+                <button type="button" onClick={handleSwap}
+                  className="text-xs text-blue-600 hover:underline flex items-center gap-1">
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                      d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                  </svg>
                   Swap
                 </button>
               </div>
-
-              <div className="relative">
-                <select
-                  value={toLocation}
-                  onChange={(e) => setToLocation(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-700/80 hover:border-slate-600 focus:border-cyan-500 rounded-xl px-3 py-2.5 text-xs text-white font-medium focus:outline-none transition cursor-pointer shadow-inner"
-                >
-                  {ALL_DHAKA_LOCATIONS.map(loc => (
-                    <option key={loc} value={loc} className="bg-slate-900 text-white">
-                      {loc}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Quick Destination Chips */}
-              <div className="flex flex-wrap gap-1 pt-1">
-                {popularDestinations.slice(0, 4).map(loc => (
-                  <button
-                    key={loc}
-                    type="button"
-                    onClick={() => setToLocation(loc)}
-                    className={`text-[10px] px-2 py-0.5 rounded transition ${
-                      toLocation === loc
-                        ? 'bg-rose-950 text-rose-300 border border-rose-700 font-bold'
-                        : 'bg-slate-800/60 hover:bg-slate-700 text-slate-400'
-                    }`}
-                  >
-                    {loc}
-                  </button>
+              <select
+                value={toLocation}
+                onChange={(e) => setToLocation(e.target.value)}
+                className={`w-full border border-slate-300 rounded-lg px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition bg-white ${!toLocation ? 'text-slate-400' : 'text-slate-800'}`}
+              >
+                <option value="" disabled>Select destination</option>
+                {ALL_DHAKA_LOCATIONS.map(loc => (
+                  <option key={loc} value={loc}>{loc}</option>
                 ))}
-              </div>
+              </select>
             </div>
           </div>
 
-          {/* Input 5: Submit Button */}
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-2 border-t border-slate-800/80">
-            <div className="text-xs text-slate-400 flex items-center gap-2">
-              <span className="inline-block w-2 h-2 rounded-full bg-cyan-400 animate-pulse"></span>
-              <span>
-                Evaluating <span className="text-white font-semibold">{fromLocation}</span> &rarr;{' '}
-                <span className="text-white font-semibold">{toLocation}</span> on {dayName} at {selectedTime}
-              </span>
-            </div>
+          {/* Validation error */}
+          {formError && (
+            <p className="mt-4 text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-4 py-2">
+              {formError}
+            </p>
+          )}
 
+          {/* Submit */}
+          <div className="mt-6">
             <button
               type="submit"
               disabled={loading}
-              className="w-full sm:w-auto px-7 py-3 rounded-2xl bg-gradient-to-r from-cyan-500 via-blue-600 to-indigo-600 hover:from-cyan-400 hover:via-blue-500 hover:to-indigo-500 text-white font-extrabold text-sm flex items-center justify-center gap-2.5 shadow-lg shadow-cyan-500/25 transition-all transform active:scale-95 disabled:opacity-50 cursor-pointer"
+              className="w-full sm:w-auto px-8 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white font-semibold text-sm transition flex items-center justify-center gap-2 shadow-sm"
             >
               {loading ? (
                 <>
-                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-                  <span>Querying Google Routes & Weather Engine...</span>
+                  <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+                  </svg>
+                  Predicting...
                 </>
               ) : (
                 <>
-                  <span>Submit</span>
-                  <ArrowRight className="w-4 h-4" />
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+                  Predict Traffic
                 </>
               )}
             </button>
@@ -447,390 +675,363 @@ export default function TrafficJourneyPredictor({ onExploreCorridors, onOpenMap 
         </form>
       </div>
 
-      {/* 4. Result Section: Traffic Prediction (High / Low / Medium) with Route */}
-      {result && (
-        <div className="space-y-6 animate-in fade-in slide-in-from-bottom-3 duration-300">
-          {/* Traffic Prediction Banner Card */}
-          <div
-            className={`rounded-3xl border p-6 sm:p-7 backdrop-blur-md shadow-2xl relative overflow-hidden transition-all ${
-              result.traffic_prediction === 'High'
-                ? 'bg-gradient-to-br from-rose-950/70 via-slate-900/90 to-red-950/40 border-rose-600/50 shadow-rose-950/40'
-                : result.traffic_prediction === 'Medium'
-                ? 'bg-gradient-to-br from-amber-950/70 via-slate-900/90 to-yellow-950/40 border-amber-500/50 shadow-amber-950/40'
-                : 'bg-gradient-to-br from-emerald-950/70 via-slate-900/90 to-teal-950/40 border-emerald-500/50 shadow-emerald-950/40'
-            }`}
-          >
-            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
-              {/* Traffic Prediction Level Pill & Details */}
-              <div className="space-y-3">
-                <div className="flex items-center gap-3">
-                  <span className="text-xs font-bold uppercase tracking-wider text-slate-300">
-                    Traffic Prediction:
-                  </span>
-                  <div
-                    className={`inline-flex items-center gap-2 px-4 py-1.5 rounded-full text-base font-black uppercase tracking-wider shadow-lg ${
-                      result.traffic_prediction === 'High'
-                        ? 'bg-rose-500 text-white shadow-rose-500/30'
-                        : result.traffic_prediction === 'Medium'
-                        ? 'bg-amber-500 text-slate-950 shadow-amber-500/30'
-                        : 'bg-emerald-500 text-white shadow-emerald-500/30'
-                    }`}
-                  >
-                    {result.traffic_prediction === 'High' && <Flame className="w-4 h-4 fill-white" />}
-                    {result.traffic_prediction === 'Medium' && <Clock className="w-4 h-4" />}
-                    {result.traffic_prediction === 'Low' && <CheckCircle2 className="w-4 h-4 fill-white" />}
-                    <span>{result.traffic_prediction}</span>
-                  </div>
-                </div>
-
-                <h3 className="text-xl sm:text-2xl font-black text-white">
-                  {result.primary_route.name}
-                </h3>
-
-                <p className="text-xs sm:text-sm text-slate-300 flex items-center gap-2">
-                  <Info className="w-4 h-4 shrink-0 text-cyan-400" />
-                  <span>{result.levelDescription}</span>
-                </p>
-
-                <div className="text-xs text-slate-400 flex flex-wrap items-center gap-x-4 gap-y-1">
-                  <span>
-                    Period: <strong className="text-slate-200">{result.periodLabel}</strong>
-                  </span>
-                  <span>•</span>
-                  <span>
-                    Telemetry Source:{' '}
-                    <strong className="text-cyan-400">{result.telemetrySource || 'Google Maps Routes API v2'}</strong>
-                  </span>
-                  <span>•</span>
-                  <span>
-                    Confidence: <strong className="text-emerald-400">{result.confidence}</strong>
-                  </span>
-                </div>
-              </div>
-
-              {/* Primary Route Metrics Cards */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <div className="bg-slate-950/80 border border-slate-800 p-3 rounded-2xl text-center">
-                  <div className="text-[10px] uppercase font-bold text-slate-400">Travel Time</div>
-                  <div className="text-xl font-extrabold text-white mt-1">
-                    {result.primary_route.travel_time_min} <span className="text-xs text-slate-400 font-normal">m</span>
-                  </div>
-                  <div className="text-[10px] text-amber-400 font-semibold mt-0.5">
-                    +{result.primary_route.traffic_delay_min}m delay
-                  </div>
-                </div>
-
-                <div className="bg-slate-950/80 border border-slate-800 p-3 rounded-2xl text-center">
-                  <div className="text-[10px] uppercase font-bold text-slate-400">Speed</div>
-                  <div className="text-xl font-extrabold text-white mt-1">
-                    {result.primary_route.speed_kmh} <span className="text-xs text-slate-400 font-normal">km/h</span>
-                  </div>
-                  <div className="text-[10px] text-slate-400 mt-0.5">
-                    Est. velocity
-                  </div>
-                </div>
-
-                <div className="bg-slate-950/80 border border-slate-800 p-3 rounded-2xl text-center">
-                  <div className="text-[10px] uppercase font-bold text-slate-400">Distance</div>
-                  <div className="text-xl font-extrabold text-white mt-1">
-                    {result.primary_route.distance_km} <span className="text-xs text-slate-400 font-normal">km</span>
-                  </div>
-                  <div className="text-[10px] text-slate-400 mt-0.5">
-                    Arterial path
-                  </div>
-                </div>
-
-                <div className="bg-slate-950/80 border border-slate-800 p-3 rounded-2xl text-center">
-                  <div className="text-[10px] uppercase font-bold text-slate-400">Free Flow</div>
-                  <div className="text-xl font-extrabold text-emerald-400 mt-1">
-                    {result.primary_route.free_flow_time_min} <span className="text-xs text-slate-400 font-normal">m</span>
-                  </div>
-                  <div className="text-[10px] text-emerald-400/80 mt-0.5">
-                    Zero traffic
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Primary Route Step-by-Step Path */}
-            <div className="mt-5 pt-4 border-t border-slate-800/80 flex flex-col md:flex-row md:items-center justify-between gap-3">
-              <div>
-                <div className="text-xs font-bold text-slate-400 mb-2 flex items-center gap-1.5">
-                  <Navigation className="w-3.5 h-3.5 text-cyan-400" />
-                  <span>Primary Route Path:</span>
-                </div>
-                <div className="flex flex-wrap items-center gap-1.5 text-xs text-slate-200">
-                  {result.primary_route.steps?.map((step, idx) => (
-                    <React.Fragment key={idx}>
-                      <span
-                        className={`px-3 py-1 rounded-xl font-medium ${
-                          idx === 0
-                            ? 'bg-emerald-950 text-emerald-300 border border-emerald-800'
-                            : idx === result.primary_route.steps.length - 1
-                            ? 'bg-rose-950 text-rose-300 border border-rose-800'
-                            : 'bg-slate-950 text-slate-200 border border-slate-800'
-                        }`}
-                      >
-                        {step}
-                      </span>
-                      {idx < result.primary_route.steps.length - 1 && (
-                        <ArrowRight className="w-3.5 h-3.5 text-slate-500 shrink-0" />
-                      )}
-                    </React.Fragment>
-                  ))}
-                </div>
-              </div>
-
-              {/* Google Maps Live Turn-by-Turn Button */}
-              {result.primary_route.google_maps_url && (
-                <a
-                  href={result.primary_route.google_maps_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-900/90 hover:bg-slate-800 border border-slate-700 text-xs font-bold text-white transition self-start md:self-auto shrink-0 shadow"
-                >
-                  <MapPin className="w-3.5 h-3.5 text-rose-400" />
-                  <span>Open in Google Maps</span>
-                  <ExternalLink className="w-3 h-3 text-slate-400" />
-                </a>
-              )}
-            </div>
+      {/* ── Server error ───────────────────────────────────────────────────── */}
+      {error && (
+        <div className="bg-red-50 border border-red-200 rounded-xl px-5 py-4 text-sm text-red-700 flex items-start gap-3">
+          <svg className="w-5 h-5 mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+              d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+          </svg>
+          <div>
+            <p className="font-semibold">Prediction failed</p>
+            <p className="text-red-600 mt-0.5">{error}</p>
           </div>
+        </div>
+      )}
 
-          {/* Interactive Route Map Preview (Leaflet) */}
-          <div className="bg-slate-900/60 border border-slate-800 rounded-3xl p-5 backdrop-blur-md shadow-xl space-y-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 text-xs font-bold text-slate-300">
-                <Layers className="w-4 h-4 text-cyan-400" />
-                <span>Live Route Topology Visualizer</span>
+      {/* ── Result Section ─────────────────────────────────────────────────── */}
+      {result && cfg && (
+        <div className="space-y-6">
+
+          {/* Traffic Level Card */}
+          <div className={`rounded-2xl border ${cfg.border} ${cfg.bg} p-6`}>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              {/* Left: route info */}
+              <div className="space-y-1">
+                <p className="text-xs text-slate-500 uppercase tracking-wide font-medium">Journey</p>
+                <p className="text-lg font-bold text-slate-800">
+                  {result.from} → {result.to}
+                </p>
+                <p className="text-sm text-slate-500">
+                  {result.day}, {result.date} at {result.time}
+                </p>
               </div>
-              <button
-                type="button"
-                onClick={() => setShowMapVisualizer(!showMapVisualizer)}
-                className="text-xs text-cyan-400 hover:text-cyan-300 font-semibold"
-              >
-                {showMapVisualizer ? 'Hide Map' : 'Show Map'}
-              </button>
+
+              {/* Right: traffic level badge */}
+              <div className="flex flex-col items-start sm:items-end gap-2">
+                <span className={`inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-bold ${cfg.badge}`}>
+                  <span className="w-2 h-2 rounded-full bg-white opacity-80"></span>
+                  {cfg.label}
+                </span>
+                <p className="text-xs text-slate-500 max-w-xs text-left sm:text-right">{cfg.desc}</p>
+              </div>
             </div>
 
-            {showMapVisualizer && (
-              <JourneyRouteMap
-                fromLocation={fromLocation}
-                toLocation={toLocation}
-                primaryRoute={result.primary_route}
-                alternativeRoute={result.alternative_route}
-                showAlternative={alternativeChoice === 'yes'}
-                trafficPrediction={result.traffic_prediction}
-              />
+            {/* Stats row */}
+            <div className="mt-5 pt-5 border-t border-slate-200 grid grid-cols-2 sm:grid-cols-4 gap-4">
+              {[
+                { label: result.primary_route?.is_estimate !== false ? 'Est. Travel Time' : 'Travel Time', value: `${result.primary_route?.travel_time_min ?? '—'} min` },
+                { label: result.primary_route?.is_estimate !== false ? 'Est. Speed' : 'Speed', value: `${result.primary_route?.speed_kmh ?? '—'} km/h` },
+                { label: 'Distance', value: `${result.primary_route?.distance_km ?? '—'} km` },
+                {
+                  label: result.primary_route?.is_estimate !== false ? 'Est. Delay' : 'Delay', value: result.primary_route?.traffic_delay_min > 0
+                    ? `+${result.primary_route.traffic_delay_min} min`
+                    : 'No delay'
+                },
+              ].map(({ label, value }) => (
+                <div key={label} className="text-center">
+                  <p className="text-xs text-slate-400 uppercase font-medium">{label}</p>
+                  <p className="text-base font-bold text-slate-800 mt-0.5">{value}</p>
+                </div>
+              ))}
+            </div>
+
+            {/* Period label */}
+            {result.periodLabel && (
+              <p className="mt-3 text-xs text-slate-500 text-center">
+                Period: <span className="font-medium text-slate-700">{result.periodLabel}</span>
+              </p>
             )}
           </div>
 
-          {/* 5. Alternative Route Question (Yes / No) */}
-          <div className="bg-slate-900/80 border border-slate-800 rounded-3xl p-6 sm:p-7 backdrop-blur-md shadow-xl text-center space-y-4">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-cyan-950/80 border border-cyan-800/60 text-cyan-400 text-xs font-semibold">
-              <Zap className="w-3.5 h-3.5" />
-              <span>Smart Detour & Congestion Bypass</span>
-            </div>
-
-            <h3 className="text-lg sm:text-xl font-extrabold text-white">
-              Alternative route? (Yes/no)
-            </h3>
-            <p className="text-xs sm:text-sm text-slate-400 max-w-lg mx-auto">
-              Would you like to explore an alternative bypass corridor (e.g. Flyover, Elevated Expressway, or Parallel Ring Road) to save travel time?
-            </p>
-
-            <div className="flex items-center justify-center gap-4 pt-2">
-              <button
-                type="button"
-                onClick={() => setAlternativeChoice('yes')}
-                className={`px-6 py-2.5 rounded-2xl font-bold text-xs sm:text-sm flex items-center gap-2 transition-all cursor-pointer ${
-                  alternativeChoice === 'yes'
-                    ? 'bg-cyan-500 text-slate-950 shadow-lg shadow-cyan-500/30 scale-105'
-                    : 'bg-slate-800 hover:bg-slate-700 text-white border border-slate-700'
-                }`}
-              >
-                <Zap className="w-4 h-4 text-amber-400" />
-                <span>Yes, Show Alternative Route</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setAlternativeChoice('no')}
-                className={`px-6 py-2.5 rounded-2xl font-bold text-xs sm:text-sm flex items-center gap-2 transition-all cursor-pointer ${
-                  alternativeChoice === 'no'
-                    ? 'bg-rose-950/90 text-rose-300 border border-rose-700 shadow-lg shadow-rose-900/30 scale-105'
-                    : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700'
-                }`}
-              >
-                <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                <span>No, Thank You</span>
-              </button>
-            </div>
-          </div>
-
-          {/* 6. If click YES -> Show Alternative Route */}
-          {alternativeChoice === 'yes' && result.alternative_route && (
-            <div className="rounded-3xl bg-gradient-to-br from-cyan-950/60 via-slate-900/90 to-blue-950/40 border border-cyan-500/50 p-6 sm:p-7 shadow-2xl backdrop-blur-md space-y-5 animate-in fade-in slide-in-from-top-3 duration-300">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-cyan-800/40 pb-4">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-2xl bg-cyan-500/20 border border-cyan-500/40 flex items-center justify-center text-cyan-400 shadow-lg shadow-cyan-500/20">
-                    <Zap className="w-5 h-5 text-amber-400" />
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs uppercase font-extrabold px-2.5 py-0.5 rounded-full bg-cyan-900/60 text-cyan-300 border border-cyan-700">
-                        {result.alternative_route.tag || 'Bypass Corridor'}
-                      </span>
-                      {result.alternative_route.time_saved_min > 0 && (
-                        <span className="text-xs font-bold text-emerald-400">
-                          ⚡ Saves ~{result.alternative_route.time_saved_min} minutes
-                        </span>
-                      )}
-                    </div>
-                    <h4 className="text-lg font-bold text-white mt-1">
-                      {result.alternative_route.name}
-                    </h4>
-                  </div>
+          {/* ── Reinforcement Learning Self-Learning Feedback Loop Banner ──────────────── */}
+          <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 border border-indigo-500/30 text-white rounded-2xl p-5 shadow-sm">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="flex items-start gap-3">
+                <div className="w-9 h-9 rounded-xl bg-indigo-500/20 border border-indigo-400/40 flex items-center justify-center text-lg shrink-0 mt-0.5">
+                  🧠
                 </div>
-
-                <div className="flex items-center gap-3 self-end sm:self-auto">
-                  <div className="text-right">
-                    <div className="text-xs text-slate-400">Bypass ETA</div>
-                    <div className="text-xl font-extrabold text-cyan-300">
-                      {result.alternative_route.travel_time_min} mins
-                    </div>
-                  </div>
-
-                  {result.alternative_route.google_maps_url && (
-                    <a
-                      href={result.alternative_route.google_maps_url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="px-3.5 py-2 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold text-xs flex items-center gap-1.5 transition shadow-md shadow-cyan-500/20"
-                    >
-                      <Navigation className="w-3.5 h-3.5" />
-                      <span>Navigate Bypass</span>
-                      <ExternalLink className="w-3 h-3" />
-                    </a>
-                  )}
-                </div>
-              </div>
-
-              {/* Comparison Stats */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div className="p-3.5 rounded-2xl bg-slate-950/80 border border-slate-800 text-center">
-                  <span className="text-[10px] uppercase font-bold text-slate-400">Time Comparison</span>
-                  <div className="text-base font-extrabold text-white mt-1 flex items-center justify-center gap-2">
-                    <span className="text-rose-400 line-through text-xs font-normal">
-                      {result.primary_route.travel_time_min}m
-                    </span>
-                    <ArrowRight className="w-3.5 h-3.5 text-slate-500" />
-                    <span className="text-emerald-400 font-black">
-                      {result.alternative_route.travel_time_min}m
-                    </span>
-                  </div>
-                  <div className="text-[10px] text-emerald-400 font-semibold mt-0.5">
-                    Saves {result.alternative_route.time_saved_min} mins
-                  </div>
-                </div>
-
-                <div className="p-3.5 rounded-2xl bg-slate-950/80 border border-slate-800 text-center">
-                  <span className="text-[10px] uppercase font-bold text-slate-400">Corridor Velocity</span>
-                  <div className="text-base font-extrabold text-white mt-1">
-                    {result.alternative_route.bypass_speed_kmh} <span className="text-xs text-slate-400 font-normal">km/h</span>
-                  </div>
-                  <div className="text-[10px] text-cyan-400 font-semibold mt-0.5">
-                    vs {result.primary_route.speed_kmh} km/h primary
-                  </div>
-                </div>
-
-                <div className="p-3.5 rounded-2xl bg-slate-950/80 border border-slate-800 text-center">
-                  <span className="text-[10px] uppercase font-bold text-slate-400">Total Distance</span>
-                  <div className="text-base font-extrabold text-white mt-1">
-                    {result.alternative_route.distance_km} <span className="text-xs text-slate-400 font-normal">km</span>
-                  </div>
-                  <div className="text-[10px] text-slate-400 mt-0.5">
-                    Via {result.alternative_route.via || 'Bypass'}
-                  </div>
-                </div>
-              </div>
-
-              {/* Alternative Route Path Steps */}
-              <div className="bg-slate-950/90 border border-slate-800/90 rounded-2xl p-4 space-y-2">
-                <div className="text-xs font-bold text-cyan-400 flex items-center gap-1.5">
-                  <Compass className="w-3.5 h-3.5" />
-                  <span>Alternative Route Path:</span>
-                </div>
-                <div className="flex flex-wrap items-center gap-1.5 text-xs text-slate-200">
-                  {result.alternative_route.steps?.map((step, idx) => (
-                    <React.Fragment key={idx}>
-                      <span
-                        className={`px-3 py-1 rounded-xl font-medium ${
-                          idx === 0
-                            ? 'bg-emerald-950 text-emerald-300 border border-emerald-800'
-                            : idx === result.alternative_route.steps.length - 1
-                            ? 'bg-rose-950 text-rose-300 border border-rose-800'
-                            : 'bg-cyan-950 text-cyan-200 border border-cyan-800/80 font-bold'
-                        }`}
-                      >
-                        {step}
-                      </span>
-                      {idx < result.alternative_route.steps.length - 1 && (
-                        <ArrowRight className="w-3.5 h-3.5 text-cyan-500 shrink-0" />
-                      )}
-                    </React.Fragment>
-                  ))}
-                </div>
-              </div>
-
-              {/* Recommendation Note */}
-              <div className="p-3.5 rounded-2xl bg-cyan-950/40 border border-cyan-800/40 text-xs text-cyan-200 flex items-start gap-2.5">
-                <ShieldCheck className="w-4 h-4 text-cyan-400 shrink-0 mt-0.5" />
                 <div>
-                  <strong className="text-white">Why this bypass: </strong>
-                  <span>{result.alternative_route.reason}</span>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="font-bold text-sm text-indigo-100">Reinforcement Learning Online Agent</span>
+                    <span className="text-[10px] font-bold uppercase tracking-wider bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2 py-0.5 rounded-full">
+                      Auto-Evaluating with Google Maps
+                    </span>
+                    {result.reinforcement_learning?.applied && (
+                      <span className="text-[10px] font-bold uppercase tracking-wider bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 px-2 py-0.5 rounded-full">
+                        Adaptive Multiplier Applied
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-indigo-200/80 mt-1 max-w-xl">
+                    {result.reinforcement_learning?.episodes_learned > 0
+                      ? `Model has refined its policy on this corridor from ${result.reinforcement_learning.episodes_learned} ground-truth evaluation episodes (Success Rate: ${result.reinforcement_learning.success_rate}, Speed Modifier: ${result.reinforcement_learning.speed_multiplier}x).`
+                      : `Prediction has been auto-saved to PostgreSQL. A continuous background agent will verify it against live Google Maps traffic to score SUCCESS vs FAIL and update its weights.`}
+                  </p>
                 </div>
               </div>
-            </div>
-          )}
 
-          {/* 7. Else (click NO) -> "Thank You" */}
-          {alternativeChoice === 'no' && (
-            <div className="rounded-3xl bg-gradient-to-br from-emerald-950/50 via-slate-900/90 to-teal-950/40 border border-emerald-600/50 p-6 sm:p-8 shadow-2xl backdrop-blur-md text-center space-y-4 animate-in fade-in slide-in-from-top-3 duration-300">
-              <div className="w-14 h-14 mx-auto rounded-3xl bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400 shadow-xl shadow-emerald-500/20">
-                <Heart className="w-7 h-7 text-emerald-400 fill-emerald-400" />
-              </div>
-
-              <div className="space-y-1.5">
-                <h3 className="text-2xl font-black text-white">Thank You!</h3>
-                <p className="text-sm text-slate-300 max-w-md mx-auto">
-                  Thank you for using the Dhaka Traffic Prediction System. Wishing you a safe, smooth, and pleasant journey!
-                </p>
-              </div>
-
-              <div className="bg-slate-950/80 border border-slate-800/80 rounded-2xl p-4 max-w-lg mx-auto text-left text-xs text-slate-400 space-y-2">
-                <div className="font-bold text-slate-200 flex items-center gap-1.5">
-                  <ShieldCheck className="w-4 h-4 text-emerald-400" />
-                  <span>Commuter Safety Guidelines:</span>
-                </div>
-                <ul className="list-disc list-inside space-y-1 text-slate-300">
-                  <li>Please maintain lane discipline and obey traffic signals.</li>
-                  <li>Allow an extra 10-15 minutes cushion for unforeseen intersection congestion.</li>
-                  <li>Check back anytime for live telemetry updates on your route.</li>
-                </ul>
-              </div>
-
-              <div className="pt-2 flex items-center justify-center gap-3">
+              <div className="flex flex-wrap items-center gap-2 shrink-0 self-end sm:self-center">
                 <button
                   type="button"
-                  onClick={() => setAlternativeChoice('yes')}
-                  className="px-4 py-2 rounded-xl text-xs font-semibold text-cyan-400 bg-slate-800/80 hover:bg-slate-800 border border-slate-700 transition cursor-pointer"
+                  onClick={handleVerifyNow}
+                  disabled={isVerifyingRl}
+                  className="px-3.5 py-2 rounded-xl text-xs font-semibold bg-indigo-600 hover:bg-indigo-500 active:scale-95 text-white transition border border-indigo-400/40 shadow-sm flex items-center gap-1.5 disabled:opacity-50"
+                  title="Query Google Maps Routes API v2 right now to check if the prediction is right or wrong, and train the model"
                 >
-                  Changed your mind? View Alternative Route
+                  {isVerifyingRl ? (
+                    <>
+                      <svg className="animate-spin -ml-1 mr-1 h-3.5 w-3.5 text-white" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      Verifying with Google Maps...
+                    </>
+                  ) : (
+                    <>
+                      <span>⚡ Evaluate Ground Truth Now</span>
+                    </>
+                  )}
                 </button>
               </div>
             </div>
-          )}
+
+            {/* Single live verification feedback */}
+            {verifyResult && verifyResult.results && verifyResult.results.length > 0 && (
+              <div className="mt-4 pt-3 border-t border-indigo-800/60 text-xs space-y-2">
+                <div className="font-semibold text-indigo-200 flex items-center justify-between">
+                  <span>Google Maps Live Ground-Truth Verification Result:</span>
+                  <span className="text-[11px] text-emerald-400">Policy weights updated in PostgreSQL ✓</span>
+                </div>
+                {verifyResult.results.map((r, i) => (
+                  <div key={i} className="flex flex-wrap items-center justify-between bg-black/35 rounded-xl p-3 gap-2 text-[11.5px] border border-white/5">
+                    <span className="font-bold text-slate-100">{r.route}</span>
+                    <div className="flex flex-wrap items-center gap-3">
+                      <span>Predicted: <b className="text-cyan-300">{r.predicted_time_min}m</b></span>
+                      <span>Google Actual: <b className="text-amber-300">{r.actual_time_min}m</b></span>
+                      <span className={`px-2 py-0.5 rounded font-bold ${r.status === 'SUCCESS' ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' : 'bg-rose-500/20 text-rose-300 border border-rose-500/30'}`}>
+                        {r.status} ({r.error_pct}% error)
+                      </span>
+                      <span className="text-slate-300 text-[11px]">Reward: <b className={r.reward >= 0 ? 'text-emerald-400' : 'text-rose-400'}>{r.reward >= 0 ? `+${r.reward}` : r.reward}</b></span>
+                      {r.speed_multiplier && (
+                        <span className="text-cyan-300 text-[10px] bg-cyan-950/50 px-2 py-0.5 rounded border border-cyan-500/30">
+                          Speed Mod: {r.speed_multiplier}x · Delay Mod: {r.delay_multiplier}x
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* ── Map (Main visual focus) ───────────────────────────────────────── */}
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-md overflow-hidden">
+            <JourneyRouteMap
+              fromLocation={result.from}
+              toLocation={result.to}
+              primaryRoute={result.primary_route}
+              alternativeRoutes={altList}
+              alternativeRoute={result.alternative_route}
+              showAlternative={altList.length > 0}
+              selectedAltIndex={selectedAltIndex}
+              onSelectAlternative={(idx) => setSelectedAltIndex(idx)}
+              trafficPrediction={result.traffic_prediction}
+              selectedDate={selectedDate}
+              selectedTime={selectedTime}
+            />
+          </div>
+
+          {/* ── Selected Route & Alternative Routes Details ───────────────────── */}
+          <div className="bg-blue-50 rounded-2xl border border-blue-200 p-6 space-y-4">
+            {altList.length > 0 && (
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => setSelectedAltIndex('primary')}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-semibold border transition flex items-center gap-2 ${selectedAltIndex === 'primary'
+                    ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
+                    : 'bg-white text-slate-700 border-slate-200 hover:border-blue-400'
+                    }`}
+                >
+                  <span
+                    className="w-2.5 h-2.5 rounded-full shrink-0"
+                    style={{ backgroundColor: selectedAltIndex === 'primary' ? '#ffffff' : '#2563eb' }}
+                  />
+                  <span>Primary Route</span>
+                  <span className={`px-1.5 py-0.5 rounded text-[10px] ${selectedAltIndex === 'primary' ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'
+                    }`}>
+                    {result.traffic_prediction} · {result.primary_route?.travel_time_min}m
+                  </span>
+                </button>
+
+                {altList.map((alt, idx) => {
+                  const routeCol = ALT_ROUTE_COLORS[idx % ALT_ROUTE_COLORS.length];
+                  const isSel = selectedAltIndex === idx;
+                  return (
+                    <button
+                      key={alt.id || idx}
+                      type="button"
+                      onClick={() => setSelectedAltIndex(idx)}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-semibold border transition flex items-center gap-2 ${isSel
+                        ? 'text-white shadow-sm'
+                        : 'bg-white text-slate-700 border-slate-200 hover:border-slate-400'
+                        }`}
+                      style={isSel ? { backgroundColor: routeCol, borderColor: routeCol } : undefined}
+                    >
+                      <span
+                        className="w-2.5 h-2.5 rounded-full shrink-0"
+                        style={{ backgroundColor: isSel ? '#ffffff' : routeCol }}
+                      />
+                      <span>Alt {idx + 1}: {alt.via || alt.name}</span>
+                      <span className={`px-1.5 py-0.5 rounded text-[10px] ${isSel ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'
+                        }`}>
+                        {alt.traffic_prediction || 'Low'} · {alt.travel_time_min}m
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
+            {(selectedAltIndex === 'primary' || !activeAlt) ? (
+              <>
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <span className="inline-block text-xs font-semibold px-2.5 py-1 bg-blue-100 text-blue-700 rounded-full mb-2">
+                      Primary Route · {result.traffic_prediction} Traffic
+                    </span>
+                    <h3 className="text-base font-bold text-slate-800">
+                      {result.primary_route?.name || `${result.from} to ${result.to}`}
+                    </h3>
+                    <p className="text-sm text-slate-500 mt-1">
+                      {result.primary_route?.matchedCorridor || 'Primary Dhaka Corridor'}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-3 gap-3">
+                  {[
+                    { label: result.primary_route?.is_estimate !== false ? 'Est. Travel Time' : 'Travel Time', value: `${result.primary_route?.travel_time_min ?? '—'} min`, color: 'text-blue-700' },
+                    { label: result.primary_route?.is_estimate !== false ? 'Est. Speed' : 'Speed', value: `${result.primary_route?.speed_kmh ?? '—'} km/h` },
+                    { label: 'Distance', value: `${result.primary_route?.distance_km ?? '—'} km` },
+                  ].map(({ label, value, color }) => (
+                    <div key={label} className="bg-white rounded-xl p-3 text-center border border-blue-100">
+                      <p className="text-xs text-slate-400 uppercase font-medium">{label}</p>
+                      <p className={`text-sm font-bold mt-0.5 ${color || 'text-slate-800'}`}>{value}</p>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Primary route steps */}
+                <RoutePathSection
+                  steps={result.primary_route?.steps}
+                  checkpoints={result.primary_route?.checkpoints}
+                  roadSegments={result.primary_route?.road_segments}
+                />
+
+                {result.primary_route?.google_maps_url && (
+                  <a href={result.primary_route.google_maps_url}
+                    target="_blank" rel="noopener noreferrer"
+                    className="inline-flex items-center gap-2 text-sm font-semibold text-blue-700 hover:underline">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                        d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                        d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                    Open in Google Maps
+                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                        d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                    </svg>
+                  </a>
+                )}
+              </>
+            ) : activeAlt && (
+              <>
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <span className="inline-block text-xs font-semibold px-2.5 py-1 bg-blue-100 text-blue-700 rounded-full mb-2">
+                      {activeAlt.tag || 'Bypass Route'} · {activeAlt.traffic_prediction || 'Low'} Traffic
+                    </span>
+                    <h3 className="text-base font-bold text-slate-800">
+                      {activeAlt.name}
+                    </h3>
+                    <p className="text-sm text-slate-500 mt-1">
+                      Via {activeAlt.via || 'Bypass Corridor'}
+                    </p>
+                  </div>
+                  {activeAlt.time_saved_min !== undefined && (
+                    <div className="text-right shrink-0">
+                      <p className="text-xs text-slate-500">
+                        {activeAlt.time_saved_min >= 0 ? 'Est. time saved' : 'vs Primary'}
+                      </p>
+                      <p className={`text-lg font-bold ${activeAlt.time_saved_min > 0
+                        ? 'text-green-600'
+                        : activeAlt.time_saved_min < 0
+                          ? 'text-amber-600'
+                          : 'text-slate-600'
+                        }`}>
+                        {activeAlt.time_saved_min > 0
+                          ? `~${activeAlt.time_saved_min} min`
+                          : activeAlt.time_saved_min < 0
+                            ? `+${Math.abs(activeAlt.time_saved_min)} min`
+                            : '0 min'}
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Comparison */}
+                <div className="grid grid-cols-3 gap-3">
+                  {[
+                    { label: activeAlt.is_estimate !== false ? 'Est. Alt. Time' : 'Alt. Travel Time', value: `${activeAlt.travel_time_min} min`, color: 'text-blue-700' },
+                    { label: 'Est. Speed', value: `${activeAlt.bypass_speed_kmh} km/h` },
+                    { label: 'Distance', value: `${activeAlt.distance_km} km` },
+                  ].map(({ label, value, color }) => (
+                    <div key={label} className="bg-white rounded-xl p-3 text-center border border-blue-100">
+                      <p className="text-xs text-slate-400 uppercase font-medium">{label}</p>
+                      <p className={`text-sm font-bold mt-0.5 ${color || 'text-slate-800'}`}>{value}</p>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Route steps */}
+                <RoutePathSection
+                  steps={activeAlt.steps}
+                  checkpoints={activeAlt.checkpoints}
+                  roadSegments={activeAlt.road_segments}
+                />
+
+                {/* Reason */}
+                {activeAlt.reason && (
+                  <p className="text-xs text-blue-700 bg-blue-100 rounded-xl px-4 py-3">
+                    <strong>Why this route: </strong>{activeAlt.reason}
+                  </p>
+                )}
+
+                {/* Google Maps link */}
+                {activeAlt.google_maps_url && (
+                  <a href={activeAlt.google_maps_url}
+                    target="_blank" rel="noopener noreferrer"
+                    className="inline-flex items-center gap-2 text-sm font-semibold text-blue-700 hover:underline">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                        d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                        d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                    Open in Google Maps
+                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                        d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                    </svg>
+                  </a>
+                )}
+              </>
+            )}
+          </div>
         </div>
       )}
     </div>

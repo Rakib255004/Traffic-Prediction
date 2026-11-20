@@ -1,0 +1,34 @@
+{
+  "id": "alif_paribahan",
+  "name": "Alif Paribahan",
+  "name_bn": "আলিফ পরিবহন",
+  "route_code": "ALF-01",
+  "type": "Semi-Seating",
+  "origin": "Mirpur 14",
+  "destination": "Banasree",
+  "stoppages": [
+    "Mirpur 14",
+    "Mirpur 10",
+    "Kazipara",
+    "Shewrapara",
+    "Agargaon",
+    "Bijoy Sarani",
+    "Jahangir Gate",
+    "Mohakhali",
+    "Wireless Mor",
+    "Gulshan 1",
+    "Badda Link Road",
+    "Rampura Bridge",
+    "Banasree"
+  ],
+  "corridors_covered": [
+    "R26",
+    "R49"
+  ],
+  "fare_min_bdt": 10,
+  "fare_max_bdt": 35,
+  "first_bus": "06:00 AM",
+  "last_bus": "11:00 PM",
+  "frequency_min": 6,
+  "operator": "Alif Paribahan Ltd."
+}

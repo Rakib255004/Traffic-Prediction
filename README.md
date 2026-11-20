@@ -1,97 +1,177 @@
-# Dhaka Traffic Prediction & Congestion Bypass Machine
+# 🚦 TrafficPulse — Dhaka Traffic Prediction & Congestion Bypass System
 
-An AI-driven real-time traffic prediction and congestion bypass application for Greater Dhaka. Combines Google Maps Routes API v2, Waze Live crowdsourced probes, OpenWeatherMap real-time weather telemetry, and OpenStreetMap road topologies.
+<div align="center">
+
+[![Live Web Application](https://img.shields.io/badge/Live_Demo-Firebase_Hosting-0284c7?style=for-the-badge&logo=firebase&logoColor=white)](https://trafficpulse-dhaka.web.app)
+[![API Server Status](https://img.shields.io/badge/API_Server-Render_Cloud-46E3B7?style=for-the-badge&logo=render&logoColor=black)](https://traffic-prediction-q1yl.onrender.com)
+[![React 19](https://img.shields.io/badge/React_19-Vite-61DAFB?style=for-the-badge&logo=react&logoColor=black)](https://react.dev/)
+[![Node.js](https://img.shields.io/badge/Node.js-Express-339933?style=for-the-badge&logo=node.js&logoColor=white)](https://nodejs.org/)
+[![Leaflet](https://img.shields.io/badge/Maps-Leaflet_OSM-199900?style=for-the-badge&logo=leaflet&logoColor=white)](https://leafletjs.com/)
+
+An AI-powered intelligent transportation system and real-time traffic prediction platform designed specifically for Greater Dhaka. Combines **47,490+ authentic observations**, Google Maps Routes API v2, OpenWeatherMap telemetry, and OpenStreetMap road network geometries.
+
+[**Explore Live Application »**](https://trafficpulse-dhaka.web.app) · [Report Bug](https://github.com/maRia-1506A/Traffic-Prediction/issues) · [Request Feature](https://github.com/maRia-1506A/Traffic-Prediction/issues)
+
+</div>
 
 ---
 
-## 📁 Project Architecture & Clean Folder Structure
+## 🌐 Live Deployments
+
+| Component | Platform | URL | Description |
+| :--- | :--- | :--- | :--- |
+| **Frontend Web App** | **Google Firebase Hosting** | **[trafficpulse-dhaka.web.app](https://trafficpulse-dhaka.web.app)** | Production React 19 SPA served via global CDN edge |
+| **Mirror Domain** | **Google Firebase Hosting** | **[trafficpulse-dhaka.firebaseapp.com](https://trafficpulse-dhaka.firebaseapp.com)** | Secondary HTTPS domain |
+| **Backend API Server** | **Render Cloud Container** | **[traffic-prediction-q1yl.onrender.com](https://traffic-prediction-q1yl.onrender.com)** | Node.js Express REST API, geometry cache & data analytics |
+
+---
+
+## 🌟 Key Capabilities & Features
+
+### 1. 🎯 Journey Route Predictor & Congestion Forecast
+* **Predictive Delay Modeling:** Select origin and destination across 128+ Dhaka junctions, specify commute time and date, and get instantaneous travel time, delay estimates, and congestion classification (`Normal`, `Moderate`, `Heavy`, `Severe`).
+* **Bypass Advisor:** Recommends alternate flyovers and perimeter bypasses when major arterials (e.g., Mirpur Road, Airport Road, Kazi Nazrul Islam Ave) suffer from peak gridlock.
+* **Multimodal Integration:** Recommends Dhaka Metro MRT Line 6 elevated train segments, local buses, CNG, and rickshaw transitions.
+
+### 2. 🗺️ Interactive Explore Map (Curved OSM Telemetry)
+* **Real-time Road Flows:** Displays all 50 official Dhaka corridors with authentic OpenStreetMap curved geometries.
+* **Bottleneck Radar Rings:** Dynamic pulsing radar indicators identifying severe slowdown zones.
+* **Velocity Triage Filters:** Filter corridors by flow velocity (`Fast Flow >25 km/h`, `Congested <22 km/h`, `Severe Jams <14 km/h`).
+* **Interactive Measure Tool:** Click any two points on the map to calculate exact road-snapped travel distance, time, and routing.
+
+### 3. 📊 Traffic Insights & Historical Analytics Dashboard
+* **47,490+ Recorded Observations:** Ingests and analyzes real-world historical traffic data spanning August to November 2026.
+* **24-Hour Diurnal Congestion Curve:** Visualizes hourly traffic intensity across Greater Dhaka.
+* **Peak Rush Triage:** Ranks top congestion hours by volume, severity, and delay percentage.
+* **Zero-Latency In-Memory Caching:** Fast, cached navigation between tabs with background live auto-sync.
+
+### 4. 🚌 Authentic Dhaka Bus Route Directory (DTCA Verified)
+* **Real-Time Stoppage Matching:** Find direct buses between any two stops across Greater Dhaka (e.g. *Savar → Mirpur 10*, *Gazipur → Sadarghat*).
+* **Bus Network Explorer:** Complete database of 41+ authentic Dhaka bus operators (*Itihas*, *Bihanga*, *D-Link*, *Al-Makka*, etc.) with detailed stoppage sequences, fares, and operating schedules.
+
+---
+
+## 📁 Repository Structure
 
 ```
 Traffic-Prediction/
 ├── frontend/                          # 🌐 React 19 + Vite Frontend Application
-│   ├── public/                        # Static assets (favicons, icons)
-│   ├── src/                           # Pure React source code
-│   │   ├── assets/                    # Images and logos
-│   │   ├── components/                # UI components (Predictor, Map, KPIs, etc.)
-│   │   │   ├── TrafficJourneyPredictor.jsx # Primary Day/Date, Time, From, To predictor
-│   │   │   ├── JourneyRouteMap.jsx    # Interactive Leaflet route topology visualizer
-│   │   │   ├── TrafficMap.jsx         # Full Dhaka 50 corridors map
-│   │   │   ├── MetricsOverview.jsx    # Network stats & KPIs
-│   │   │   ├── RoutesList.jsx         # Corridors explorer (R01-R50)
-│   │   │   ├── RouteAdvisor.jsx       # Jam bypass advisor
-│   │   │   ├── PredictorView.jsx      # What-If ML simulator
-│   │   │   ├── HistoryAnalytics.jsx   # Dataset explorer
-│   │   │   └── Navbar.jsx             # Top bar with live weather & engine status
-│   │   ├── utils/                     # Client-side route matching & prediction engine
-│   │   │   ├── journeyPredictor.js    # Subpath extractor, BFS pathfinding & delay model
-│   │   │   └── dhakaRoutesData.js     # 128 Dhaka nodes & 50 official corridors
-│   │   ├── api.js                     # Frontend API service connecting to backend
-│   │   ├── App.jsx                    # Root application component
+│   ├── src/
+│   │   ├── components/                # UI Views & Interactive Map Components
+│   │   │   ├── TrafficJourneyPredictor.jsx # Primary Day/Time route predictor
+│   │   │   ├── ExploreMap.jsx         # Full interactive Dhaka OSM map with radar rings
+│   │   │   ├── TrafficInsights.jsx    # Analytics dashboard (47,494 records)
+│   │   │   ├── DhakaBusDirectory.jsx  # DTCA verified bus route finder
+│   │   │   ├── JourneyRouteMap.jsx    # Leaflet topological journey viewer
+│   │   │   ├── OSMTransitMap.jsx      # Road-snapping transit diagram
+│   │   │   └── AboutPage.jsx          # Project documentation & team info
+│   │   ├── utils/                     # Client-side BFS routing & fallback predictors
+│   │   ├── api.js                     # Resilient API client with timeout protection
+│   │   ├── App.jsx                    # Root view with navigation
 │   │   └── main.jsx                   # Vite entry point
-│   ├── index.html                     # HTML root template
-│   ├── vite.config.js                 # Vite + Tailwind v4 + proxy configuration
-│   └── package.json                   # Frontend npm metadata
+│   ├── vite.config.js                 # Vite + Tailwind CSS configuration
+│   └── package.json                   # Frontend dependencies
 │
 ├── server/                            # 🚀 Node.js Express API Backend
-│   ├── index.js                       # Express server (port 5000)
-│   ├── trafficService.js              # Traffic simulation, delay modeling & corridor resolver
-│   ├── routesConfig.js                # JS registry of 128 Dhaka nodes & 50 official routes
-│   └── apiClients.js                  # Google Maps multi-key pool & OpenWeather client
-│
-├── data_collection/                   # 🐍 Python Data Gathering & Scraper Pipeline
-│   ├── collect_data.py                # Live traffic data collector (Google / Waze / OpenWeather)
-│   ├── traffic_clients.py             # Dual traffic client classes (Google + Waze)
-│   ├── route_advisor.py               # Alternative bypass & congestion CLI advisor
-│   ├── routes_config.py               # 50 Dhaka commuter corridors & GPS coordinates
-│   ├── fetch_roads.py                 # Overpass OSM road topology extractor
-│   ├── generate_history.py            # Historical dataset synthesizer
-│   ├── unified_call.py                # CLI runner for traffic clients
-│   ├── requirements.txt               # Python package dependencies
-│   └── README.md                      # Python scripts documentation
+│   ├── index.js                       # Express server, route controllers & CORS
+│   ├── trafficService.js              # A* road graph, corridor resolver & Bayesian analytics
+│   ├── busService.js                  # 41+ Dhaka bus routes & transfer search engine
+│   ├── routesConfig.js                # Coordinates for 128 Dhaka nodes & 50 official routes
+│   └── osmRouter.js                   # OpenStreetMap graph topology extractor
 │
 ├── data/                              # 📊 Datasets & Topologies
-│   ├── traffic_data.csv               # Historical & real-time collected telemetry
-│   ├── traffic_prediction_routes.csv  # 50 Official Dhaka Corridors (R01 to R50)
-│   └── dhaka_roads.geojson            # OpenStreetMap Dhaka road topologies
+│   ├── traffic_data.csv               # 47,494+ authentic Dhaka traffic observations
+│   ├── traffic_prediction_routes.csv  # 50 Official Monitored Dhaka Corridors (R01–R50)
+│   ├── dhaka_roads.geojson            # OpenStreetMap Dhaka road topologies
+│   └── bus/                           # Bus stoppage data & route definitions
 │
-├── .env                               # API keys (Google Maps & OpenWeatherMap)
-├── .gitignore                         # Exclusions (node_modules, dist, .env)
-└── package.json                       # Root package.json with unified execution scripts
+├── data_collection/                   # 🐍 Python Automation & Scraper Pipeline
+│   ├── collect_data.py                # Automated traffic poller (Google / Waze / OpenWeather)
+│   ├── fetch_roads.py                 # Overpass OSM road topology extractor
+│   ├── route_advisor.py               # CLI Route advisor
+│   └── requirements.txt               # Python package dependencies
+│
+├── firebase.json                      # Firebase Hosting deployment configuration
+├── .firebaserc                        # Firebase project binding
+├── render.yaml                        # Render cloud deployment blueprint
+├── .gitignore                         # Secret protection & build exclusions
+└── package.json                       # Unified workspace runner scripts
 ```
 
 ---
 
-## ⚡ Quick Start
+## ⚡ Local Development Setup
 
-### 1. Install Dependencies
+### 1. Prerequisites
+* **Node.js** v18+ installed
+* **Python** 3.10+ (optional, only for the automated data collection pipeline)
+* **Git**
+
+### 2. Clone Repository
 ```bash
-# Node.js dependencies
-npm install
-
-# Python dependencies (for data collection pipeline)
-pip install -r data_collection/requirements.txt
+git clone https://github.com/maRia-1506A/Traffic-Prediction.git
+cd Traffic-Prediction
 ```
 
-### 2. Configure API Keys (`.env`)
-Create or edit `.env` in the root directory:
+### 3. Install Dependencies
+```bash
+# Install root & backend dependencies
+npm install
+
+# Install frontend dependencies
+cd frontend && npm install && cd ..
+```
+
+### 4. Configure Environment Variables
+Create a `.env` file in the project root:
 ```env
-# Google Maps Routes API v2 (supports multi-key pooling separated by comma)
-GOOGLE_MAPS_API_KEYS=YOUR_GOOGLE_KEY_1,YOUR_GOOGLE_KEY_2
-GOOGLE_MAPS_API_KEY=YOUR_GOOGLE_KEY_1
+# Google Maps Routes API v2 (supports multi-key rotation separated by comma)
+GOOGLE_MAPS_API_KEYS=YOUR_GOOGLE_MAPS_KEY_1,YOUR_GOOGLE_MAPS_KEY_2
+GOOGLE_MAPS_API_KEY=YOUR_GOOGLE_MAPS_KEY_1
 
 # OpenWeatherMap API Key
 OPENWEATHERMAP_API_KEY=YOUR_OPENWEATHER_KEY
 ```
 
-### 3. Run the Entire System
+### 5. Run the Full System
 ```bash
-# Starts both the Node.js API server (port 5000) and React Vite (port 3000)
+# Starts both Backend (Port 5000) and Frontend (Port 3000) concurrently
 npm run dev:all
 ```
+Open **`http://localhost:3000`** in your browser.
 
-Or run services individually:
-- **Frontend only**: `npm run dev` (opens on `http://localhost:3000`)
-- **Backend API only**: `npm run server` (runs on `http://localhost:5000`)
-- **Production Build**: `npm run build` (builds frontend to `dist/`)
-- **Run Python Data Collector**: `npm run data:collect`
-- **Run Python Route Advisor CLI**: `npm run data:advisor`
+---
+
+## 🚀 How Deployment Works
+
+### Deploying Frontend to Firebase Hosting:
+```bash
+npm run build
+firebase deploy --only hosting
+```
+
+### Deploying Backend to Render:
+Render is configured with Continuous Deployment (CD). Simply push updates to the `main` branch:
+```bash
+git add .
+git commit -m "update server"
+git push origin main
+```
+Render automatically builds and spins up the updated container!
+
+---
+
+## 👥 Authors
+
+Developed as an intelligent transportation system and predictive analytics project for Greater Dhaka:
+
+| Author | GitHub |
+| :--- | :--- |
+| **Zannatul Farzana Maria** | [@maRia-1506A](https://github.com/maRia-1506A) |
+| **K. M. Fathum Mubin** | [@mubin25s](https://github.com/mubin25s) |
+| **Rakib Rohan** | [@Rakib255004](https://github.com/Rakib255004) |
+
+---
+
+## 📄 License
+Copyright (c) 2026 Zannatul Farzana Maria, K. M. Fathum Mubin and Rakib Rohan. All rights reserved. Developed for academic and educational evaluation. See [LICENSE](LICENSE) for terms.

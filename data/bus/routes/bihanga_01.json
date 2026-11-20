@@ -1,0 +1,37 @@
+{
+  "id": "bihanga_01",
+  "name": "Bihanga Paribahan",
+  "name_bn": "বিহঙ্গ পরিবহন",
+  "route_code": "BH-01",
+  "type": "Local / Semi-Seating",
+  "origin": "Mirpur 14",
+  "destination": "Azimpur / Sadarghat",
+  "stoppages": [
+    "Mirpur 14",
+    "Dental",
+    "Mirpur 10",
+    "Kazipara",
+    "Shewrapara",
+    "Agargaon",
+    "Bijoy Sarani",
+    "Farmgate",
+    "Karwan Bazar",
+    "Banglamotor",
+    "Shahbagh",
+    "Katabon",
+    "Bata Signal",
+    "Science Lab",
+    "Nilkhet",
+    "Azimpur"
+  ],
+  "corridors_covered": [
+    "R26",
+    "R48"
+  ],
+  "fare_min_bdt": 10,
+  "fare_max_bdt": 35,
+  "first_bus": "06:00 AM",
+  "last_bus": "11:00 PM",
+  "frequency_min": 5,
+  "operator": "Bihanga Transport Co-operative"
+}

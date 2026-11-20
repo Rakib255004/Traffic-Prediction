@@ -1,0 +1,42 @@
+{
+  "id": "dishari_paribahan",
+  "name": "Dishari Paribahan",
+  "name_bn": "দিশারী পরিবহন",
+  "route_code": "DS-01",
+  "type": "Local / Semi-Seating",
+  "origin": "Mirpur 12",
+  "destination": "Chittagong Road (Signboard / Kanchpur)",
+  "stoppages": [
+    "Mirpur 12",
+    "Mirpur 11",
+    "Mirpur 10",
+    "Kazipara",
+    "Shewrapara",
+    "Agargaon",
+    "Bijoy Sarani",
+    "Farmgate",
+    "Karwan Bazar",
+    "Banglamotor",
+    "Shahbagh",
+    "Matsya Bhaban",
+    "Press Club",
+    "Paltan",
+    "Motijheel",
+    "Sayedabad",
+    "Jatrabari",
+    "Shonir Akhra",
+    "Signboard",
+    "Chittagong Road"
+  ],
+  "corridors_covered": [
+    "R26",
+    "R48",
+    "R09"
+  ],
+  "fare_min_bdt": 10,
+  "fare_max_bdt": 45,
+  "first_bus": "06:00 AM",
+  "last_bus": "11:00 PM",
+  "frequency_min": 6,
+  "operator": "Dishari Paribahan Ltd."
+}

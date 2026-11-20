@@ -1,0 +1,42 @@
+{
+  "id": "robrob_paribahan",
+  "name": "Robrob Paribahan",
+  "name_bn": "রবরব পরিবহন",
+  "route_code": "RR-01",
+  "type": "Semi-Seating",
+  "origin": "Gabtoli",
+  "destination": "Banasree / Meradiya",
+  "stoppages": [
+    "Gabtoli",
+    "Technical",
+    "Ansar Camp",
+    "Mirpur 1",
+    "Mirpur 2",
+    "Mirpur 10",
+    "Mirpur 11",
+    "Purobi",
+    "Kalshi",
+    "ECB Chattor",
+    "MES",
+    "Kakoli",
+    "Banani",
+    "Gulshan 2",
+    "Gulshan 1",
+    "Badda Link Road",
+    "Rampura Bridge",
+    "Banasree",
+    "Meradiya"
+  ],
+  "corridors_covered": [
+    "R01",
+    "R05",
+    "R47",
+    "R49"
+  ],
+  "fare_min_bdt": 10,
+  "fare_max_bdt": 40,
+  "first_bus": "06:00 AM",
+  "last_bus": "11:00 PM",
+  "frequency_min": 6,
+  "operator": "Robrob Transport Co."
+}

@@ -1,0 +1,39 @@
+{
+  "id": "raja_city",
+  "name": "Raja City / City Link",
+  "name_bn": "রাজা সিটি / সিটি লিংক",
+  "route_code": "RC-01",
+  "type": "Semi-Seating",
+  "origin": "Postogola",
+  "destination": "Ghatarchar (Keraniganj)",
+  "stoppages": [
+    "Postogola",
+    "Jurain",
+    "Dayaganj",
+    "Gulisthan",
+    "GPO",
+    "Paltan",
+    "Press Club",
+    "Shahbagh",
+    "Bata Signal",
+    "Science Lab",
+    "City College",
+    "Jigatola",
+    "Dhanmondi 15",
+    "Star Kabab",
+    "Shankar",
+    "Mohammadpur Bus Stand",
+    "Bosila",
+    "Ghatarchar"
+  ],
+  "corridors_covered": [
+    "R05",
+    "R44"
+  ],
+  "fare_min_bdt": 10,
+  "fare_max_bdt": 35,
+  "first_bus": "06:00 AM",
+  "last_bus": "10:30 PM",
+  "frequency_min": 7,
+  "operator": "Raja City Transport"
+}

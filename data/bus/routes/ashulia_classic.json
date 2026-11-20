@@ -1,0 +1,29 @@
+{
+  "id": "ashulia_classic",
+  "name": "Ashulia Classic",
+  "name_bn": "আশুলিয়া ক্লাসিক",
+  "route_code": "ASH-01",
+  "type": "Semi-Seating",
+  "origin": "Abdullahpur",
+  "destination": "Ashulia Bazar / Baipail",
+  "stoppages": [
+    "Abdullahpur",
+    "Kamarpara",
+    "Dhour",
+    "Ashulia Beribadh",
+    "Ashulia Bazar",
+    "Fantasy Kingdom",
+    "Zirabo",
+    "Baipail"
+  ],
+  "corridors_covered": [
+    "R03",
+    "R34"
+  ],
+  "fare_min_bdt": 10,
+  "fare_max_bdt": 35,
+  "first_bus": "06:00 AM",
+  "last_bus": "10:30 PM",
+  "frequency_min": 8,
+  "operator": "Ashulia Classic Transport"
+}
