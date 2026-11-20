@@ -675,7 +675,7 @@ async function fetchOsrmRoadGeometry(waypoints) {
       osrmGeometryCache.set(cacheKey, { timestamp: now, data: result });
       return result;
     }
-  } catch (_) {}
+  } catch (_) { }
   return null;
 }
 
@@ -1014,8 +1014,8 @@ export async function predictJourneyService({ date, day, time, from, to }) {
     const mapped = (rawLvl === 'TRAFFIC_JAM' || rawLvl === 'HEAVY' || rawLvl === 'SEVERE')
       ? 'High'
       : (rawLvl === 'SLOW' || rawLvl === 'MODERATE')
-      ? 'Medium'
-      : 'Low';
+        ? 'Medium'
+        : 'Low';
     return {
       ...seg,
       observed_telemetry: {
@@ -1384,8 +1384,8 @@ export async function predictJourneyService({ date, day, time, from, to }) {
             wp.tag === 'Expressway'
               ? 'Estimated route via elevated expressway corridor with reduced signal bottlenecks.'
               : wp.tag === 'Flyover'
-              ? 'Estimated route via flyover corridor avoiding major surface signal stops.'
-              : 'Estimated secondary arterial corridor bypassing primary choke points.'
+                ? 'Estimated route via flyover corridor avoiding major surface signal stops.'
+                : 'Estimated secondary arterial corridor bypassing primary choke points.'
         };
       })
     )
@@ -1528,7 +1528,7 @@ export async function predictJourneyService({ date, day, time, from, to }) {
     predictedSpeedKmh: speedKmh,
     predictedLevel: trafficPrediction,
     evalDelayMinutes: isNow ? 1.5 : 4.0,
-  }).catch(() => {});
+  }).catch(() => { });
 
   journeyPredictionCache.set(cacheKey, { timestamp: Date.now(), data: finalResult });
   return finalResult;
