@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { ALL_DHAKA_LOCATIONS } from '../utils/journeyPredictor.js';
-import { predictJourneyApi, evaluateRlNow, fetchRlStatus } from '../api.js';
+import { predictJourneyApi } from '../api.js';
 import JourneyRouteMap from './JourneyRouteMap.jsx';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -266,35 +266,6 @@ export default function TrafficJourneyPredictor() {
   const [error, setError] = useState(null);
   const [selectedAltIndex, setSelectedAltIndex] = useState('primary');
   const [formError, setFormError] = useState('');
-  const [isVerifyingRl, setIsVerifyingRl] = useState(false);
-  const [verifyResult, setVerifyResult] = useState(null);
-
-  const handleVerifyNow = async () => {
-    setIsVerifyingRl(true);
-    try {
-      const predPayload = result ? {
-        from: result.from,
-        to: result.to,
-        origCoords: result.primary_route?.origin_coords,
-        destCoords: result.primary_route?.dest_coords,
-        predictedTimeMin: result.primary_route?.travel_time_min,
-        predictedSpeedKmh: result.primary_route?.speed_kmh,
-        predictedLevel: result.traffic_prediction,
-        corridorKey: result.reinforcement_learning?.corridor_key || result.primary_route?.route_code,
-        hour: selectedTime ? Number(selectedTime.split(':')[0]) : new Date().getHours(),
-        day: result.day || 'Friday',
-      } : null;
-
-      const res = await evaluateRlNow(predPayload, 5);
-      if (res) {
-        setVerifyResult(res);
-      }
-    } catch (e) {
-      console.warn('Error verifying RL:', e);
-    } finally {
-      setIsVerifyingRl(false);
-    }
-  };
 
   const dayName = getDayName(selectedDate);
   const isWeekendDay = dayName === 'Friday' || dayName === 'Saturday';
@@ -356,11 +327,18 @@ export default function TrafficJourneyPredictor() {
   };
 
   const cfg = result ? (LEVEL_CONFIG[result.traffic_prediction] || LEVEL_CONFIG.Low) : null;
-  const altList = result?.alternative_routes?.length
-    ? result.alternative_routes
-    : result?.alternative_route
-      ? [result.alternative_route]
-      : [];
+  const altList = useMemo(() => {
+    return result?.alternative_routes?.length
+      ? result.alternative_routes
+      : result?.alternative_route
+        ? [result.alternative_route]
+        : [];
+  }, [result?.alternative_routes, result?.alternative_route]);
+
+  const handleSelectAlternative = useCallback((idx) => {
+    setSelectedAltIndex(idx);
+  }, []);
+
   const activeAltCardIdx = typeof selectedAltIndex === 'number' ? selectedAltIndex : 0;
   const activeAlt = altList[activeAltCardIdx] || result?.alternative_route || null;
   const ALT_ROUTE_COLORS = ['#7c3aed', '#0d9488', '#ea580c']; // Purple, Teal, Orange
@@ -744,87 +722,6 @@ export default function TrafficJourneyPredictor() {
             )}
           </div>
 
-          {/* ── Reinforcement Learning Self-Learning Feedback Loop Banner ──────────────── */}
-          <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 border border-indigo-500/30 text-white rounded-2xl p-5 shadow-sm">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-              <div className="flex items-start gap-3">
-                <div className="w-9 h-9 rounded-xl bg-indigo-500/20 border border-indigo-400/40 flex items-center justify-center text-lg shrink-0 mt-0.5">
-                  🧠
-                </div>
-                <div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="font-bold text-sm text-indigo-100">Reinforcement Learning Online Agent</span>
-                    <span className="text-[10px] font-bold uppercase tracking-wider bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2 py-0.5 rounded-full">
-                      Auto-Evaluating with Google Maps
-                    </span>
-                    {result.reinforcement_learning?.applied && (
-                      <span className="text-[10px] font-bold uppercase tracking-wider bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 px-2 py-0.5 rounded-full">
-                        Adaptive Multiplier Applied
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-xs text-indigo-200/80 mt-1 max-w-xl">
-                    {result.reinforcement_learning?.episodes_learned > 0
-                      ? `Model has refined its policy on this corridor from ${result.reinforcement_learning.episodes_learned} ground-truth evaluation episodes (Success Rate: ${result.reinforcement_learning.success_rate}, Speed Modifier: ${result.reinforcement_learning.speed_multiplier}x).`
-                      : `Prediction has been auto-saved to PostgreSQL. A continuous background agent will verify it against live Google Maps traffic to score SUCCESS vs FAIL and update its weights.`}
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex flex-wrap items-center gap-2 shrink-0 self-end sm:self-center">
-                <button
-                  type="button"
-                  onClick={handleVerifyNow}
-                  disabled={isVerifyingRl}
-                  className="px-3.5 py-2 rounded-xl text-xs font-semibold bg-indigo-600 hover:bg-indigo-500 active:scale-95 text-white transition border border-indigo-400/40 shadow-sm flex items-center gap-1.5 disabled:opacity-50"
-                  title="Query Google Maps Routes API v2 right now to check if the prediction is right or wrong, and train the model"
-                >
-                  {isVerifyingRl ? (
-                    <>
-                      <svg className="animate-spin -ml-1 mr-1 h-3.5 w-3.5 text-white" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                      </svg>
-                      Verifying with Google Maps...
-                    </>
-                  ) : (
-                    <>
-                      <span>⚡ Evaluate Ground Truth Now</span>
-                    </>
-                  )}
-                </button>
-              </div>
-            </div>
-
-            {/* Single live verification feedback */}
-            {verifyResult && verifyResult.results && verifyResult.results.length > 0 && (
-              <div className="mt-4 pt-3 border-t border-indigo-800/60 text-xs space-y-2">
-                <div className="font-semibold text-indigo-200 flex items-center justify-between">
-                  <span>Google Maps Live Ground-Truth Verification Result:</span>
-                  <span className="text-[11px] text-emerald-400">Policy weights updated in PostgreSQL ✓</span>
-                </div>
-                {verifyResult.results.map((r, i) => (
-                  <div key={i} className="flex flex-wrap items-center justify-between bg-black/35 rounded-xl p-3 gap-2 text-[11.5px] border border-white/5">
-                    <span className="font-bold text-slate-100">{r.route}</span>
-                    <div className="flex flex-wrap items-center gap-3">
-                      <span>Predicted: <b className="text-cyan-300">{r.predicted_time_min}m</b></span>
-                      <span>Google Actual: <b className="text-amber-300">{r.actual_time_min}m</b></span>
-                      <span className={`px-2 py-0.5 rounded font-bold ${r.status === 'SUCCESS' ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' : 'bg-rose-500/20 text-rose-300 border border-rose-500/30'}`}>
-                        {r.status} ({r.error_pct}% error)
-                      </span>
-                      <span className="text-slate-300 text-[11px]">Reward: <b className={r.reward >= 0 ? 'text-emerald-400' : 'text-rose-400'}>{r.reward >= 0 ? `+${r.reward}` : r.reward}</b></span>
-                      {r.speed_multiplier && (
-                        <span className="text-cyan-300 text-[10px] bg-cyan-950/50 px-2 py-0.5 rounded border border-cyan-500/30">
-                          Speed Mod: {r.speed_multiplier}x · Delay Mod: {r.delay_multiplier}x
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
           {/* ── Map (Main visual focus) ───────────────────────────────────────── */}
           <div className="bg-white rounded-2xl border border-slate-200 shadow-md overflow-hidden">
             <JourneyRouteMap
@@ -835,7 +732,7 @@ export default function TrafficJourneyPredictor() {
               alternativeRoute={result.alternative_route}
               showAlternative={altList.length > 0}
               selectedAltIndex={selectedAltIndex}
-              onSelectAlternative={(idx) => setSelectedAltIndex(idx)}
+              onSelectAlternative={handleSelectAlternative}
               trafficPrediction={result.traffic_prediction}
               selectedDate={selectedDate}
               selectedTime={selectedTime}

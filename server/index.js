@@ -20,7 +20,7 @@ import { NODE_COORDINATES, DHAKA_BYPASS_WAYPOINTS, haversineKm } from './routesC
 import { buildOsmRouteGeometry } from './osmRouter.js';
 import { getAllBuses, getBusById, getBusStops, findBusesBetween } from './busService.js';
 import { supabase, checkDatabaseHealth } from './db.js';
-import { getRlStatus, evaluatePendingPredictions, startRlBackgroundWorker, run10HourTrainingSimulation } from './rlEngine.js';
+import { getRlStatus, evaluatePendingPredictions, startRlBackgroundWorker, startOsrmContinuousCollector, run10HourTrainingSimulation } from './rlEngine.js';
 
 // Resilient compression import (safe if module not present)
 let compression = null;
@@ -736,6 +736,8 @@ const server = app.listen(PORT, HOST, () => {
   console.log(`🚀 Dhaka Traffic Node.js API Server running on http://127.0.0.1:${PORT} and http://localhost:${PORT}`);
   // Start continuous reinforcement learning evaluation worker
   startRlBackgroundWorker(3 * 60 * 1000);
+  // Start OSRM continuous road data collector (autonomous, every 5 minutes)
+  startOsrmContinuousCollector(5 * 60 * 1000);
 });
 
 // Graceful shutdown

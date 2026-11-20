@@ -568,8 +568,8 @@ async function fetchAccurateRoadGeometry(p1, p2, profile = 'driving') {
 // Walk = Dotted Blue (dotdot......), Bus = Blue, Metro = Red, Rickshaw/CNG = Green, 2nd Bus = Purple
 const MODE_COLORS = {
   walk: {
-    stroke: '#2563eb', // Royal transit blue for Google Maps style circular dots
-    border: '#1d4ed8',
+    stroke: '#eab308', // Vibrant yellow for walk dotdot
+    border: '#ca8a04',
     dash: '0.1, 13',
     label: 'Walk',
     icon: '🚶'
@@ -617,24 +617,24 @@ function createPillIcon(text, icon, modeColor = '#2563eb') {
     <div style="
       display: inline-flex;
       align-items: center;
-      gap: 7px;
-      padding: 6px 14px;
+      gap: 5px;
+      padding: 4px 10px;
       background: #ffffff;
       color: #0f172a;
-      border: 2px solid ${modeColor};
+      border: 1.5px solid ${modeColor};
       border-radius: 9999px;
-      box-shadow: 0 4px 14px rgba(15, 23, 42, 0.22), 0 1px 3px rgba(0, 0, 0, 0.1);
-      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      font-size: 13px;
-      font-weight: 800;
+      box-shadow: 0 4px 12px -2px rgba(15, 23, 42, 0.2);
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      font-size: 11.5px;
+      font-weight: 700;
       white-space: nowrap;
       cursor: pointer;
       transform: translate(-50%, -50%);
-      transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+      transition: transform 0.15s ease;
       user-select: none;
     " class="transit-pill-hover">
-      <span style="color: #0f172a; letter-spacing: -0.01em;">${text}</span>
-      <span style="font-size: 15px; display: inline-flex; align-items: center; justify-content: center;">${icon}</span>
+      <span style="color: #0f172a;">${text}</span>
+      <span style="font-size: 13px;">${icon}</span>
     </div>
   `;
 
@@ -647,132 +647,52 @@ function createPillIcon(text, icon, modeColor = '#2563eb') {
   });
 }
 
-// ── Home Map Identical SVG Teardrop Pin Generator (Green Start & Red Destination, Zero Flags) ──
+// ── Standard Pin Generator (Green Start & Red Destination, Zero Bulky Text) ──
 function makePin(fill, label = '') {
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="40" viewBox="0 0 32 40" style="display:block">
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="30" height="38" viewBox="0 0 32 40" style="display:block">
     <path fill="${fill}" stroke="#ffffff" stroke-width="2"
       d="M16 1.5 C8.2 1.5 2 7.7 2 15.5 C2 25.5 16 38.5 16 38.5 C16 38.5 30 25.5 30 15.5 C30 7.7 23.8 1.5 16 1.5Z"/>
-    <circle cx="16" cy="15.5" r="5.5" fill="#ffffff"/>
+    <circle cx="16" cy="15.5" r="5" fill="#ffffff"/>
   </svg>`;
 
   return L.divIcon({
     className: '',
-    html: `<div title="${label}" style="width:32px;height:40px;filter:drop-shadow(0 2px 5px rgba(0,0,0,0.35))">${svg}</div>`,
-    iconSize: [32, 40],
-    iconAnchor: [16, 39],
-    popupAnchor: [0, -40],
+    html: `<div title="${label}" style="width:30px;height:38px;filter:drop-shadow(0 2px 5px rgba(0,0,0,0.3))">${svg}</div>`,
+    iconSize: [30, 38],
+    iconAnchor: [15, 37],
+    popupAnchor: [0, -38],
   });
 }
 
-// ── High-Detail Hover Card Generator (Ultra-Rich Transit Inspection View) ──────
+// ── Clean, Standard Micro-Tooltip Generator (No Bulky Text, Proper Beautiful View) ──
 function createDetailedTooltipHtml(seg) {
-  const busList = seg.buses || [];
-  const stationsList = seg.stations || [];
-
   return `
     <div style="
-      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      min-width: 310px;
-      max-width: 360px;
-      padding: 10px 12px;
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      padding: 6px 10px;
       color: #0f172a;
-      line-height: 1.4;
+      min-width: 150px;
+      line-height: 1.35;
     ">
-      <!-- Header with Mode Badge & Status -->
-      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; border-bottom: 1px solid #e2e8f0; padding-bottom: 6px;">
-        <div style="display: flex; align-items: center; gap: 7px;">
-          <span style="font-size: 20px;">${seg.pillIcon}</span>
-          <div>
-            <div style="font-size: 13px; font-weight: 800; color: ${seg.color}; text-transform: uppercase; letter-spacing: 0.5px;">
-              ${seg.name}
-            </div>
-            <div style="font-size: 10px; color: #64748b; font-weight: 600;">
-              ${seg.modeTypeLabel || 'Transit Corridor Service'}
-            </div>
-          </div>
+      <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px;">
+        <div style="display: flex; align-items: center; gap: 5px; font-weight: 800; font-size: 12px; color: ${seg.color || '#2563eb'};">
+          <span style="font-size: 13px;">${seg.pillIcon || '🚌'}</span>
+          <span>${seg.name}</span>
         </div>
-        <span style="font-size: 10px; font-weight: 700; background: #f0fdf4; color: #16a34a; border: 1px solid #bbf7d0; padding: 2px 7px; border-radius: 9999px;">
-          ● Active Route
+        <span style="font-size: 9.5px; font-weight: 700; color: #16a34a; background: #f0fdf4; border: 1px solid #bbf7d0; padding: 1px 5px; border-radius: 9999px;">
+          Active
         </span>
       </div>
 
-      <!-- Corridor Journey Section -->
-      <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 7px 9px; margin-bottom: 8px;">
-        <div style="font-size: 11px; font-weight: 800; color: #1e293b; display: flex; align-items: center; justify-content: space-between;">
-          <span style="max-width: 45%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">🚩 ${seg.from}</span>
-          <span style="color: #94a3b8; font-weight: 900;">➔</span>
-          <span style="max-width: 45%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">🏁 ${seg.to}</span>
-        </div>
-        ${seg.viaText ? `<div style="font-size: 10px; color: #64748b; margin-top: 4px; font-weight: 500;"><strong>Via:</strong> ${seg.viaText}</div>` : ''}
+      <div style="font-size: 11px; color: #334155; margin-top: 3px; font-weight: 600;">
+        ${seg.from} ➔ ${seg.to}
       </div>
 
-      <!-- 3-Column Live Metrics Bar -->
-      <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-bottom: 8px; text-align: center;">
-        <div style="background: #eff6ff; border: 1px solid #dbeafe; border-radius: 8px; padding: 5px 2px;">
-          <div style="font-size: 9px; text-transform: uppercase; font-weight: 700; color: #3b82f6;">Est. Time</div>
-          <div style="font-size: 13px; font-weight: 900; color: #1d4ed8;">~${seg.time}m</div>
-        </div>
-        <div style="background: #f0fdf4; border: 1px solid #dcfce7; border-radius: 8px; padding: 5px 2px;">
-          <div style="font-size: 9px; text-transform: uppercase; font-weight: 700; color: #16a34a;">Govt. Fare</div>
-          <div style="font-size: 13px; font-weight: 900; color: #15803d;">৳${seg.fare}</div>
-        </div>
-        <div style="background: #faf5ff; border: 1px solid #f3e8ff; border-radius: 8px; padding: 5px 2px;">
-          <div style="font-size: 9px; text-transform: uppercase; font-weight: 700; color: #9333ea;">Traffic</div>
-          <div style="font-size: 10px; font-weight: 800; color: #7e22ce;">${seg.trafficBadge || 'Normal Flow'}</div>
-        </div>
-      </div>
-
-      <!-- Available Bus Services (If Bus Mode) -->
-      ${busList.length > 0 ? `
-        <div style="margin-bottom: 8px;">
-          <div style="font-size: 11px; font-weight: 800; color: #334155; margin-bottom: 4px; display: flex; justify-content: space-between; align-items: center;">
-            <span>Available Bus Services (${busList.length})</span>
-            <span style="font-size: 10px; color: #64748b; font-weight: 600;">Every 5-8 mins</span>
-          </div>
-          <div style="display: flex; flex-direction: column; gap: 4px; max-height: 140px; overflow-y: auto; padding-right: 2px;">
-            ${busList.map(b => `
-              <div style="display: flex; align-items: center; justify-content: space-between; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 6px; padding: 4px 7px;">
-                <div>
-                  <div style="font-weight: 800; font-size: 12px; color: #0f172a;">${b.name_bn || b.name}</div>
-                  ${b.name && b.name !== b.name_bn ? `<div style="font-size: 10px; color: #64748b;">${b.name}</div>` : ''}
-                </div>
-                <div style="text-align: right;">
-                  ${b.route_code ? `<span style="font-size: 9px; font-weight: 800; background: #dbeafe; color: #1e40af; padding: 1px 5px; border-radius: 4px;">${b.route_code}</span>` : ''}
-                  <div style="font-size: 10px; color: #10b981; font-weight: 700; margin-top: 1px;">৳${b.fare_bdt || seg.fare}</div>
-                </div>
-              </div>
-            `).join('')}
-          </div>
-        </div>
-      ` : ''}
-
-      <!-- Metro Stations Traversed (If Metro Mode) -->
-      ${seg.isMetro && stationsList.length > 0 ? `
-        <div style="margin-bottom: 8px; background: #fef2f2; border: 1px solid #fecaca; border-radius: 8px; padding: 6px 8px;">
-          <div style="font-size: 10px; font-weight: 800; color: #991b1b; margin-bottom: 3px;">
-            🚇 Stations Traversed (${stationsList.length} stations):
-          </div>
-          <div style="font-size: 10px; color: #7f1d1d; line-height: 1.4; font-weight: 500;">
-            ${stationsList.join(' ➔ ')}
-          </div>
-        </div>
-      ` : ''}
-
-      <!-- Local Transit Options (If Feeder / CNG / Rickshaw) -->
-      ${seg.local_transports && seg.local_transports.length > 0 ? `
-        <div style="margin-bottom: 8px; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 6px 8px;">
-          <div style="font-size: 10px; font-weight: 800; color: #166534; margin-bottom: 2px;">
-            🛺 Feeder Options:
-          </div>
-          <div style="font-size: 10px; color: #15803d;">
-            ${seg.local_transports.join(' • ')}
-          </div>
-        </div>
-      ` : ''}
-
-      <!-- Boarding Guide / Step-by-Step Instructions -->
-      <div style="font-size: 10px; color: #475569; background: #f8fafc; border-radius: 6px; padding: 6px 8px; border-left: 3px solid ${seg.color};">
-        💡 <strong>Boarding Guide:</strong> ${seg.instructions}
+      <div style="font-size: 10px; color: #64748b; margin-top: 4px; display: flex; align-items: center; gap: 6px; font-weight: 600;">
+        <span>⏱ ~${seg.time || 20}m</span>
+        <span>•</span>
+        <span>৳${seg.fare || 25}</span>
+        ${seg.trafficBadge ? `<span>•</span><span style="color:#7c3aed;">${seg.trafficBadge}</span>` : ''}
       </div>
     </div>
   `;
@@ -807,12 +727,20 @@ export default function OSMTransitMap({ busTransit, fromLocation, toLocation }) 
 
     L.control.zoom({ position: 'bottomright' }).addTo(map);
 
-    // OpenStreetMap Standard Street Tiles
-    const osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 19,
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+    // Detailed roadmap tiles with World Street fallback (100% watermark-free, identical to home map)
+    let fellBack = false;
+    const baseTiles = L.tileLayer('https://mt{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}', {
+      maxZoom: 20,
+      subdomains: '0123',
+      attribution: '&copy; Google Maps &copy; Dhaka TrafficPulse',
     });
-    osmLayer.addTo(map);
+    baseTiles.on('tileerror', () => {
+      if (!fellBack) {
+        fellBack = true;
+        baseTiles.setUrl('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}');
+      }
+    });
+    baseTiles.addTo(map);
 
     layersGroupRef.current = L.featureGroup().addTo(map);
     mapInstanceRef.current = map;
@@ -1118,9 +1046,18 @@ export default function OSMTransitMap({ busTransit, fromLocation, toLocation }) 
             lineJoin: 'round',
           }).addTo(group);
 
-          // 3. Perfect circular dots "dotdot......"
+          // White casing underlay for maximum crisp contrast on detailed streets
+          L.polyline(seg.coords, {
+            color: '#1e293b',
+            weight: 8,
+            opacity: 0.25,
+            lineCap: 'round',
+            lineJoin: 'round',
+          }).addTo(group);
+
+          // Perfect circular dots "dotdot......" in YELLOW color
           const poly = L.polyline(seg.coords, {
-            color: '#2563eb', // Royal transit blue
+            color: '#eab308', // Vibrant yellow dots
             weight: 6,
             opacity: 1.0,
             dashArray: '0.1, 13', // Produces perfect round dots spaced 13px apart
@@ -1132,7 +1069,7 @@ export default function OSMTransitMap({ busTransit, fromLocation, toLocation }) 
           const pillIdx = Math.floor(seg.coords.length / 2);
           const pillCoord = seg.coords[pillIdx];
           const walkPillMarker = L.marker(pillCoord, {
-            icon: createPillIcon(seg.pillText || '8 min walk', '🚶', '#2563eb'),
+            icon: createPillIcon(seg.pillText || '8 min walk', '🚶', '#eab308'),
             zIndexOffset: 850,
           }).addTo(group);
 
@@ -1151,10 +1088,19 @@ export default function OSMTransitMap({ busTransit, fromLocation, toLocation }) 
             opacity: 1,
           });
         } else {
+          // Soft white casing underlay for crisp contrast
+          L.polyline(seg.coords, {
+            color: '#ffffff',
+            weight: (seg.isMetro ? 8 : 7) + 3.5,
+            opacity: 0.95,
+            lineCap: 'round',
+            lineJoin: 'round',
+          }).addTo(group);
+
           // Multi-point polyline following every road curve and corner
           const poly = L.polyline(seg.coords, {
             color: seg.color,
-            weight: seg.isMetro ? 8 : 7,
+            weight: seg.isMetro ? 7.5 : 6.5,
             opacity: 1.0,
             lineCap: 'round',
             lineJoin: 'round',
@@ -1190,7 +1136,7 @@ export default function OSMTransitMap({ busTransit, fromLocation, toLocation }) 
       // ── Transit Stoppage Boarding Node (Connection between walk dots and bus route) ──
       const busBoardMarker = L.circleMarker(originCoord, {
         radius: 6,
-        color: '#2563eb',
+        color: '#eab308',
         fillColor: '#ffffff',
         fillOpacity: 1,
         weight: 3.5,
@@ -1198,8 +1144,8 @@ export default function OSMTransitMap({ busTransit, fromLocation, toLocation }) 
       }).addTo(group);
 
       busBoardMarker.bindTooltip(
-        `<div style="font-family:'Inter',sans-serif;font-size:11.5px;color:#0f172a;padding:4px 6px;">
-          <b>🚏 Board Transit:</b> ${fromLocation} Stoppage
+        `<div style="font-family:'Inter',sans-serif;font-size:11px;color:#b45309;font-weight:700;padding:2px 4px;">
+          🚏 Board: ${fromLocation}
         </div>`,
         { direction: 'top', offset: [0, -10], className: 'rich-transit-tooltip' }
       );
@@ -1209,18 +1155,12 @@ export default function OSMTransitMap({ busTransit, fromLocation, toLocation }) 
         icon: makePin('#16a34a', fromLocation),
         zIndexOffset: 1000,
       }).addTo(group).bindTooltip(
-        `<div style="font-family:'Inter',sans-serif;font-size:12px;color:#0f172a;line-height:1.4;">
-          <div style="font-weight:800;color:#16a34a;display:flex;align-items:center;gap:4px;">
-            <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#16a34a;"></span>
-            ${fromLocation} (Start)
-          </div>
-          <div style="font-size:11px;color:#475569;margin-top:2px;">
-            🚶 Walk along dotted path to bus counter
-          </div>
+        `<div style="font-family:'Inter',sans-serif;font-size:11.5px;color:#16a34a;font-weight:700;padding:2px 4px;">
+          🟢 ${fromLocation} (Start)
         </div>`,
         {
           direction: 'top',
-          offset: [0, -38],
+          offset: [0, -36],
           className: 'rich-transit-tooltip',
         }
       );
@@ -1229,18 +1169,12 @@ export default function OSMTransitMap({ busTransit, fromLocation, toLocation }) 
         icon: makePin('#dc2626', toLocation),
         zIndexOffset: 1000,
       }).addTo(group).bindTooltip(
-        `<div style="font-family:'Inter',sans-serif;font-size:12px;color:#0f172a;line-height:1.4;">
-          <div style="font-weight:800;color:#dc2626;display:flex;align-items:center;gap:4px;">
-            <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#dc2626;"></span>
-            ${toLocation} (Destination)
-          </div>
-          <div style="font-size:11px;color:#475569;margin-top:2px;">
-            Final Destination Stop
-          </div>
+        `<div style="font-family:'Inter',sans-serif;font-size:11.5px;color:#dc2626;font-weight:700;padding:2px 4px;">
+          🔴 ${toLocation} (Destination)
         </div>`,
         {
           direction: 'top',
-          offset: [0, -38],
+          offset: [0, -36],
           className: 'rich-transit-tooltip',
         }
       );
@@ -1286,43 +1220,34 @@ export default function OSMTransitMap({ busTransit, fromLocation, toLocation }) 
       `}</style>
 
       {/* ── Header ── */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-xl bg-blue-500/10 text-blue-600 flex items-center justify-center font-bold text-sm shrink-0">
-              🗺️
-            </div>
-            <div>
-              <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
-                OpenStreetMap Route Suggestion
-                <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 font-bengali">
-                  সঠিক রোড ট্রানজিট ম্যাপ
-                </span>
-              </h3>
-              <p className="text-xs text-slate-500">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3">
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-xl bg-blue-50 text-blue-600 border border-blue-200/60 flex items-center justify-center font-bold text-sm shrink-0">
+            🗺️
+          </div>
+          <div>
+            <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+              <span>Road Transit Map</span>
+              <span className="text-[11px] font-semibold text-blue-700 bg-blue-50 border border-blue-200/70 px-2 py-0.5 rounded-full">
                 {fromLocation} ➔ {toLocation}
-                <span className="ml-2 font-semibold text-blue-600">
-                  • Follows exact street road curves • Hover anywhere on road line to inspect details
-                </span>
-              </p>
-            </div>
+              </span>
+            </h3>
+            <p className="text-xs text-slate-500">
+              Curved road alignment with boarding points and walking path
+            </p>
           </div>
         </div>
 
         {/* Total Time & Fare Badge */}
-        <div className="flex items-center gap-3 bg-white px-3.5 py-1.5 rounded-xl border border-slate-200 shadow-2xs self-start sm:self-auto text-xs">
-          <div>
-            <span className="text-[10px] text-slate-400 block uppercase font-bold">Total Time</span>
-            <span className="font-extrabold text-slate-800">
-              ~{activeRoute?.total_est_time_min || 35} mins
-            </span>
+        <div className="flex items-center gap-2.5 bg-white px-3.5 py-1.5 rounded-xl border border-slate-200 shadow-2xs self-start sm:self-auto text-xs">
+          <div className="flex items-center gap-1.5">
+            <span className="text-slate-400">Time:</span>
+            <span className="font-bold text-slate-800">~{activeRoute?.total_est_time_min || 35} mins</span>
           </div>
-          <div className="w-px h-5 bg-slate-200"></div>
-          <div>
-            <span className="text-[10px] text-slate-400 block uppercase font-bold">Total Fare</span>
-            <span className="font-extrabold text-emerald-700">
-              ~৳{activeRoute?.total_est_fare_bdt || 30}
-            </span>
+          <span className="text-slate-300">•</span>
+          <div className="flex items-center gap-1.5">
+            <span className="text-slate-400">Fare:</span>
+            <span className="font-bold text-emerald-700">~৳{activeRoute?.total_est_fare_bdt || 30}</span>
           </div>
         </div>
       </div>
@@ -1368,39 +1293,28 @@ export default function OSMTransitMap({ busTransit, fromLocation, toLocation }) 
           className="z-10"
         />
 
-        {/* Legend Overlay Bar with Exact Mode Colors Specified by User */}
-        <div className="absolute bottom-3 left-3 z-20 bg-white/95 backdrop-blur-md px-3.5 py-2.5 rounded-xl border border-slate-200 shadow-md text-xs flex flex-wrap items-center gap-3.5">
+        {/* Minimalist, Clean Standard Floating Legend Bar */}
+        <div className="absolute bottom-3 left-3 z-20 bg-white/90 backdrop-blur-md px-3 py-1.5 rounded-xl border border-slate-200/80 shadow-md text-[11px] flex items-center gap-3">
           <div className="flex items-center gap-1.5">
             <span className="w-2.5 h-2.5 rounded-full bg-emerald-600 inline-block shadow-2xs"></span>
-            <span className="text-[11px] font-bold text-emerald-700">Start (Green Pin)</span>
+            <span className="font-semibold text-slate-700">Start</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <span className="tracking-widest font-black text-amber-500 inline-block text-[10px] leading-none">••••</span>
+            <span className="font-semibold text-slate-700">Walk</span>
           </div>
           <div className="flex items-center gap-1.5">
-            <span className="tracking-widest font-extrabold text-blue-600 inline-block text-[12px] leading-none">••••</span>
-            <span className="text-[11px] font-bold text-blue-700">Walk 🚶 (Dotted)</span>
+            <span className="w-3 h-1.5 bg-blue-600 rounded-xs inline-block"></span>
+            <span className="font-semibold text-slate-700">Bus</span>
           </div>
           <div className="flex items-center gap-1.5">
-            <span className="w-3.5 h-1.5 bg-blue-600 rounded-sm inline-block"></span>
-            <span className="text-[11px] font-bold text-blue-700">Bus 🚌 (Blue)</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <span className="w-3.5 h-1.5 bg-red-600 rounded-sm inline-block"></span>
-            <span className="text-[11px] font-bold text-red-700">Metro 🚇 (Red)</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <span className="w-3.5 h-1.5 bg-emerald-600 rounded-sm inline-block"></span>
-            <span className="text-[11px] font-bold text-emerald-700">CNG / Rickshaw 🛺 (Green)</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <span className="w-3.5 h-1.5 bg-purple-600 rounded-sm inline-block"></span>
-            <span className="text-[11px] font-bold text-purple-700">2nd Bus 🚌 (Purple)</span>
+            <span className="w-3 h-1.5 bg-red-600 rounded-xs inline-block"></span>
+            <span className="font-semibold text-slate-700">Metro</span>
           </div>
           <div className="flex items-center gap-1.5">
             <span className="w-2.5 h-2.5 rounded-full bg-red-600 inline-block shadow-2xs"></span>
-            <span className="text-[11px] font-bold text-red-700">Destination (Red Pin)</span>
+            <span className="font-semibold text-slate-700">Destination</span>
           </div>
-          <span className="text-[10px] text-slate-400 italic">
-            • Hover over any line or pill to view full bus & transit details
-          </span>
         </div>
       </div>
     </div>

@@ -1527,6 +1527,8 @@ export async function predictJourneyService({ date, day, time, from, to }) {
     predictedTimeMin: travelTimeMin,
     predictedSpeedKmh: speedKmh,
     predictedLevel: trafficPrediction,
+    date: resolvedDate,
+    time: cleanTime,
     evalDelayMinutes: isNow ? 1.5 : 4.0,
   }).catch(() => { });
 

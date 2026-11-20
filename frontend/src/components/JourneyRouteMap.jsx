@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useMemo, useCallback } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { NODE_COORDINATES } from '../utils/dhakaRoutesData.js';
@@ -156,12 +156,33 @@ export default function JourneyRouteMap({
   const [refinedRoadMap, setRefinedRoadMap] = useState({});
   const [mobileLegendOpen, setMobileLegendOpen] = useState(false);
 
-  // Resolve available 2-3 alternatives cleanly
-  const resolvedAlts = alternativeRoutes?.length
-    ? alternativeRoutes.slice(0, 3)
-    : alternativeRoute
-    ? [alternativeRoute]
-    : [];
+  // Callback refs to avoid layer recreation when parent passes inline function
+  const onSelectAltRef = useRef(onSelectAlternative);
+  onSelectAltRef.current = onSelectAlternative;
+  const onToggleAltRef = useRef(onToggleAlternative);
+  onToggleAltRef.current = onToggleAlternative;
+
+  // Resolve available 2-3 alternatives cleanly (memoized to avoid new array references)
+  const resolvedAlts = useMemo(() => {
+    return alternativeRoutes?.length
+      ? alternativeRoutes.slice(0, 3)
+      : alternativeRoute
+      ? [alternativeRoute]
+      : [];
+  }, [alternativeRoutes, alternativeRoute]);
+
+  // Track route signature and already-refined keys to prevent infinite re-fetching loops
+  const currentRouteKey = `${fromLocation}->${toLocation}:${primaryRoute?.name || primaryRoute?.route_code || ''}`;
+  const prevRouteKeyRef = useRef(currentRouteKey);
+  const refinedRequestedRef = useRef(new Set());
+
+  useEffect(() => {
+    if (prevRouteKeyRef.current !== currentRouteKey) {
+      prevRouteKeyRef.current = currentRouteKey;
+      refinedRequestedRef.current.clear();
+      setRefinedRoadMap({});
+    }
+  }, [currentRouteKey]);
 
   // ── Auto-refine straight-line coordinates into exact street road curves ──────
   useEffect(() => {
@@ -171,12 +192,16 @@ export default function JourneyRouteMap({
 
     // Primary route check
     const primCoords = primaryRoute?.road_coords;
-    if (primCoords && hasStraightJump(primCoords, 0.5)) {
+    if (primCoords && hasStraightJump(primCoords, 0.5) && !refinedRequestedRef.current.has('primary')) {
+      refinedRequestedRef.current.add('primary');
       const cps = (primaryRoute?.checkpoints || []).map(c => c.coords).filter(Boolean);
       const wps = [origCoords, ...cps, destCoords];
       fetchClientRoadCurve(wps).then(curve => {
         if (active && curve && curve.length >= 8) {
-          setRefinedRoadMap(prev => ({ ...prev, primary: curve }));
+          setRefinedRoadMap(prev => {
+            if (prev.primary && prev.primary.length === curve.length) return prev;
+            return { ...prev, primary: curve };
+          });
         }
       });
     }
@@ -185,18 +210,22 @@ export default function JourneyRouteMap({
     resolvedAlts.forEach((alt, idx) => {
       const key = alt.id || `alt-${idx}`;
       const altCoords = alt.road_coords;
-      if (!altCoords || hasStraightJump(altCoords, 0.5)) {
+      if ((!altCoords || hasStraightJump(altCoords, 0.5)) && !refinedRequestedRef.current.has(key)) {
+        refinedRequestedRef.current.add(key);
         const altWps = alt.waypoints || (alt.coords ? [origCoords, alt.coords, destCoords] : [origCoords, destCoords]);
         fetchClientRoadCurve(altWps).then(curve => {
           if (active && curve && curve.length >= 8) {
-            setRefinedRoadMap(prev => ({ ...prev, [key]: curve }));
+            setRefinedRoadMap(prev => {
+              if (prev[key] && prev[key].length === curve.length) return prev;
+              return { ...prev, [key]: curve };
+            });
           }
         });
       }
     });
 
     return () => { active = false; };
-  }, [primaryRoute, resolvedAlts, fromLocation, toLocation]);
+  }, [currentRouteKey, primaryRoute?.road_coords?.length, resolvedAlts.length, fromLocation, toLocation]);
 
   // ── Auto-resize Leaflet map smoothly for Phone, Tablet, Laptop, and PC ────────
   useEffect(() => {
@@ -452,7 +481,7 @@ export default function JourneyRouteMap({
       altPoly.on('mouseover', () => altPoly.setStyle({ weight: isSelected ? 8.5 : 6, opacity: 1 }));
       altPoly.on('mouseout',  () => altPoly.setStyle({ weight: isSelected ? 7 : 4.5, opacity: isSelected ? 1.0 : 0.72 }));
       altPoly.on('click', () => {
-        if (onSelectAlternative) onSelectAlternative(idx);
+        onSelectAltRef.current?.(idx);
       });
 
       altPoly.addTo(al);
@@ -475,7 +504,7 @@ export default function JourneyRouteMap({
       map.invalidateSize();
       map.fitBounds(L.latLngBounds(selectedAltBounds), { padding: [45, 45], maxZoom: 14.5 });
     }
-  }, [showAlternative, resolvedAlts, selectedAltIndex, primaryRoute, fromLocation, toLocation, onSelectAlternative, refinedRoadMap]);
+  }, [showAlternative, resolvedAlts, selectedAltIndex, primaryRoute, fromLocation, toLocation, refinedRoadMap]);
 
   // ── 5. Render Primary Route Segments, Markers, Labels, & Hotspots ───────────
   useEffect(() => {
@@ -612,7 +641,7 @@ export default function JourneyRouteMap({
       poly.on('mouseover', () => poly.setStyle({ weight: isPrimarySelected ? 8.5 : 6, opacity: 1 }));
       poly.on('mouseout',  () => poly.setStyle({ weight: isPrimarySelected ? 7 : 4.5, opacity: isPrimarySelected ? 1.0 : 0.68 }));
       poly.on('click', () => {
-        if (showAlternative && onSelectAlternative) onSelectAlternative('primary');
+        if (showAlternative) onSelectAltRef.current?.('primary');
       });
 
       const obsHtml = seg.observed_telemetry
@@ -826,7 +855,7 @@ export default function JourneyRouteMap({
       map.invalidateSize();
       map.fitBounds(L.latLngBounds(bounds), { padding: [45, 45], maxZoom: 14.5 });
     }
-  }, [fromLocation, toLocation, primaryRoute, showAlternative, selectedAltIndex, resolvedAlts.length, onSelectAlternative, trafficPrediction, selectedDate, selectedTime, refinedRoadMap]);
+  }, [fromLocation, toLocation, primaryRoute, showAlternative, selectedAltIndex, resolvedAlts.length, trafficPrediction, selectedDate, selectedTime, refinedRoadMap]);
 
   // Ensure Leaflet adjusts size cleanly on resize
   useEffect(() => {
