@@ -386,75 +386,140 @@ function getStopCoord(name) {
   return [23.7800, 90.3900];
 }
 
-// ── Realistic Pedestrian Sidewalk Path (600m - 850m, Clearly Visible on Map) ──
-function getPedestrianWalkPath(transitCoord, locName = '') {
-  const low = (locName || '').toLowerCase();
+// ── Realistic Pedestrian Sidewalk Path (800m - 1.2km, Clearly Visible & Unobstructed on Map) ──
+function getPedestrianWalkPath(transitCoord, locName = '', destCoord = null) {
+  const low = (locName || '').toLowerCase().trim();
 
-  if (low.includes('mirpur 10')) {
-    // Mirpur 10 Block C inner lane to Golchottor (680m)
+  if (low.includes('savar')) {
+    // Savar Bazar / Thana Road to Savar Bus Stand (~1.0 km)
     return [
-      [23.8025, 90.3640],
-      [23.8045, 90.3662],
-      [23.8060, 90.3675],
+      [23.8550, 90.2505], // Savar Thana Road / Bazar residential approach (Initial State)
+      [23.8525, 90.2530], // Savar College Road intersection
+      [23.8495, 90.2555], // Bus Counter entrance road
+      transitCoord         // Savar Bus Stand
+    ];
+  }
+  if (low.includes('mirpur 10')) {
+    // Mirpur 10 Block C inner lane to Golchottor (~850m)
+    return [
+      [23.8005, 90.3610],
+      [23.8030, 90.3640],
+      [23.8052, 90.3668],
+      transitCoord
+    ];
+  }
+  if (low.includes('mirpur 11')) {
+    return [
+      [23.8235, 90.3590],
+      [23.8210, 90.3625],
+      transitCoord
+    ];
+  }
+  if (low.includes('mirpur 1')) {
+    return [
+      [23.7995, 90.3470],
+      [23.7975, 90.3505],
       transitCoord
     ];
   }
   if (low.includes('uttara') || low.includes('airport') || low.includes('abdullahpur')) {
-    // Sector 9 / Sector 7 inner road to Highway bus stand (750m)
     return [
-      [23.8730, 90.3910],
-      [23.8760, 90.3940],
-      [23.8795, 90.3965],
+      [23.8690, 90.3860],
+      [23.8735, 90.3905],
+      [23.8780, 90.3945],
       transitCoord
     ];
   }
   if (low.includes('badda')) {
-    // Middle Badda residential lane to Badda Link Road (650m)
     return [
-      [23.7745, 90.4210],
-      [23.7775, 90.4238],
+      [23.7710, 90.4175],
+      [23.7745, 90.4215],
       transitCoord
     ];
   }
   if (low.includes('farmgate')) {
-    // Indira Road to Farmgate Ananda Cinema / Metro (600m)
     return [
-      [23.7525, 90.3835],
-      [23.7550, 90.3860],
+      [23.7495, 90.3800],
+      [23.7530, 90.3840],
+      [23.7555, 90.3870],
       transitCoord
     ];
   }
   if (low.includes('motijheel')) {
-    // Dilkusha / Toyenbee Circular Road to Shapla Chattar (650m)
     return [
-      [23.7270, 90.4120],
-      [23.7300, 90.4145],
+      [23.7250, 90.4090],
+      [23.7285, 90.4130],
       transitCoord
     ];
   }
   if (low.includes('gabtoli') || low.includes('aminbazar')) {
     return [
-      [23.7890, 90.3410],
-      [23.7865, 90.3445],
+      [23.7930, 90.3360],
+      [23.7895, 90.3410],
       transitCoord
     ];
   }
   if (low.includes('mohakhali')) {
     return [
-      [23.7720, 90.4005],
-      [23.7748, 90.4032],
+      [23.7690, 90.3980],
+      [23.7730, 90.4020],
+      transitCoord
+    ];
+  }
+  if (low.includes('dhanmondi') || low.includes('science lab')) {
+    return [
+      [23.7445, 90.3720],
+      [23.7410, 90.3780],
+      transitCoord
+    ];
+  }
+  if (low.includes('gulshan')) {
+    return [
+      [23.7850, 90.4090],
+      [23.7890, 90.4130],
+      transitCoord
+    ];
+  }
+  if (low.includes('gazipur')) {
+    return [
+      [23.9995, 90.4140],
+      [23.9940, 90.4195],
+      transitCoord
+    ];
+  }
+  if (low.includes('ashulia') || low.includes('zirabo') || low.includes('baipail')) {
+    return [
+      [23.9030, 90.3040],
+      [23.8990, 90.3100],
       transitCoord
     ];
   }
 
-  // Standard ~700m realistic pedestrian approach along street angle
-  const dLat = -0.0055;
-  const dLng = -0.0062;
-  return [
-    [transitCoord[0] + dLat, transitCoord[1] + dLng],
-    [transitCoord[0] + dLat * 0.45, transitCoord[1] + dLng * 0.75],
-    transitCoord
+  // Dynamic geometric walk generation for any arbitrary Dhaka transit location:
+  // Orient walk approach away from departure direction so it NEVER overlaps with the bus line!
+  let walkAngle = Math.PI * 0.75;
+  if (destCoord && Array.isArray(destCoord) && destCoord.length >= 2) {
+    const dLat = destCoord[0] - transitCoord[0];
+    const dLng = destCoord[1] - transitCoord[1];
+    const bearing = Math.atan2(dLat, dLng);
+    walkAngle = bearing + Math.PI * 0.8;
+  }
+
+  const walkDist = 0.009; // ~1.0 km, clearly visible on map
+  const pStart = [
+    Number((transitCoord[0] + Math.sin(walkAngle) * walkDist).toFixed(5)),
+    Number((transitCoord[1] + Math.cos(walkAngle) * walkDist).toFixed(5))
   ];
+  const pMid1 = [
+    Number((transitCoord[0] + Math.sin(walkAngle + 0.12) * (walkDist * 0.65)).toFixed(5)),
+    Number((transitCoord[1] + Math.cos(walkAngle + 0.12) * (walkDist * 0.65)).toFixed(5))
+  ];
+  const pMid2 = [
+    Number((transitCoord[0] + Math.sin(walkAngle - 0.08) * (walkDist * 0.32)).toFixed(5)),
+    Number((transitCoord[1] + Math.cos(walkAngle - 0.08) * (walkDist * 0.32)).toFixed(5))
+  ];
+
+  return [pStart, pMid1, pMid2, transitCoord];
 }
 
 // ── True Road Snapping via Backend API + Multiple OSRM Mirrors ────────────────
@@ -500,13 +565,12 @@ async function fetchAccurateRoadGeometry(p1, p2, profile = 'driving') {
 }
 
 // ── Mode Styling & User's Explicit Color Palette ─────────────────────────────
-// Walk = Yellow, Bus = Blue, Metro = Red, Rickshaw/CNG = Green, 2nd Bus = Purple
+// Walk = Dotted Blue (dotdot......), Bus = Blue, Metro = Red, Rickshaw/CNG = Green, 2nd Bus = Purple
 const MODE_COLORS = {
   walk: {
-    stroke: '#f59e0b', // Vivid glowing yellow/amber
-    casing: '#78350f', // Dark amber contrast casing
-    border: '#d97706',
-    dash: '2, 9',
+    stroke: '#2563eb', // Royal transit blue for Google Maps style circular dots
+    border: '#1d4ed8',
+    dash: '0.1, 13',
     label: 'Walk',
     icon: '🚶'
   },
@@ -583,51 +647,20 @@ function createPillIcon(text, icon, modeColor = '#2563eb') {
   });
 }
 
-// ── Start Pedestrian Pin (Orange/Yellow Pin with Walking Icon) ─────────────────
-function createStartPinIcon(label = 'Start') {
-  const svg = `
-    <svg xmlns="http://www.w3.org/2000/svg" width="38" height="48" viewBox="0 0 38 48">
-      <defs>
-        <filter id="pinShadow" x="-20%" y="-10%" width="140%" height="130%">
-          <feDropShadow dx="0" dy="4" stdDeviation="3" flood-color="#000" flood-opacity="0.35"/>
-        </filter>
-      </defs>
-      <path d="M19,2 C9.6,2 2,9.6 2,19 C2,31 19,46 19,46 C19,46 36,31 36,19 C36,9.6 28.4,2 19,2 Z"
-        fill="#f59e0b" stroke="#ffffff" stroke-width="2.5" filter="url(#pinShadow)"/>
-      <circle cx="19" cy="19" r="10" fill="#ffffff"/>
-      <text x="19" y="24" font-size="14" text-anchor="middle" font-weight="bold">🚶</text>
-    </svg>
-  `;
+// ── Home Map Identical SVG Teardrop Pin Generator (Green Start & Red Destination, Zero Flags) ──
+function makePin(fill, label = '') {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="40" viewBox="0 0 32 40" style="display:block">
+    <path fill="${fill}" stroke="#ffffff" stroke-width="2"
+      d="M16 1.5 C8.2 1.5 2 7.7 2 15.5 C2 25.5 16 38.5 16 38.5 C16 38.5 30 25.5 30 15.5 C30 7.7 23.8 1.5 16 1.5Z"/>
+    <circle cx="16" cy="15.5" r="5.5" fill="#ffffff"/>
+  </svg>`;
 
   return L.divIcon({
-    html: `<div title="${label}" style="width:38px;height:48px;">${svg}</div>`,
     className: '',
-    iconSize: [38, 48],
-    iconAnchor: [19, 46],
-    popupAnchor: [0, -48],
-  });
-}
-
-// ── Destination Pin (Checkered Racing Flag) ──────────────────────────────────
-function createFinishFlagIcon(label = 'Destination') {
-  const svg = `
-    <svg xmlns="http://www.w3.org/2000/svg" width="40" height="48" viewBox="0 0 40 48">
-      <ellipse cx="14" cy="45" rx="10" ry="3.5" fill="rgba(0,0,0,0.3)"/>
-      <line x1="14" y1="6" x2="14" y2="45" stroke="#334155" stroke-width="3.5" stroke-linecap="round"/>
-      <circle cx="14" cy="6" r="3" fill="#f59e0b"/>
-      <rect x="14" y="8" width="11" height="8" fill="#ffffff" stroke="#1e293b" stroke-width="1"/>
-      <rect x="25" y="8" width="11" height="8" fill="#0f172a" stroke="#1e293b" stroke-width="1"/>
-      <rect x="14" y="16" width="11" height="8" fill="#0f172a" stroke="#1e293b" stroke-width="1"/>
-      <rect x="25" y="16" width="11" height="8" fill="#ffffff" stroke="#1e293b" stroke-width="1"/>
-    </svg>
-  `;
-
-  return L.divIcon({
-    html: `<div title="${label}" style="width:40px;height:48px;">${svg}</div>`,
-    className: '',
-    iconSize: [40, 48],
-    iconAnchor: [14, 45],
-    popupAnchor: [0, -46],
+    html: `<div title="${label}" style="width:32px;height:40px;filter:drop-shadow(0 2px 5px rgba(0,0,0,0.35))">${svg}</div>`,
+    iconSize: [32, 40],
+    iconAnchor: [16, 39],
+    popupAnchor: [0, -40],
   });
 }
 
@@ -784,7 +817,16 @@ export default function OSMTransitMap({ busTransit, fromLocation, toLocation }) 
     layersGroupRef.current = L.featureGroup().addTo(map);
     mapInstanceRef.current = map;
 
+    // Auto-resize Leaflet map smoothly on all screens
+    const ro = new ResizeObserver(() => {
+      map.invalidateSize();
+    });
+    if (mapContainerRef.current) {
+      ro.observe(mapContainerRef.current);
+    }
+
     return () => {
+      ro.disconnect();
       map.remove();
       mapInstanceRef.current = null;
     };
@@ -804,8 +846,8 @@ export default function OSMTransitMap({ busTransit, fromLocation, toLocation }) 
       const originCoord = getStopCoord(fromLocation);
       const destCoord = getStopCoord(toLocation);
 
-      // ── Pedestrian Walking Path: Clearly visible ~650m-800m path from residential street ──
-      const walkPathCoords = getPedestrianWalkPath(originCoord, fromLocation);
+      // ── Pedestrian Walking Path: Clearly visible ~800m-1.1km path from initial state to bus stoppage ──
+      const walkPathCoords = getPedestrianWalkPath(originCoord, fromLocation, destCoord);
       const walkStartCoord = walkPathCoords[0];
 
       // ── Priority 1: Render Selected Itinerary Tab (Metro Direct, Direct Bus, or Multimodal) ──
@@ -813,22 +855,22 @@ export default function OSMTransitMap({ busTransit, fromLocation, toLocation }) 
         const legs = activeRoute.legs;
         const hasMetro = activeRoute.modes?.includes('metro') || legs.some(l => l.mode === 'metro') || activeRoute.is_metro_direct;
 
-        // 1. Initial Pedestrian Walk Leg (Vivid Amber/Yellow Dotted Line, 100% visible on map)
+        // 1. Initial Pedestrian Walk Leg (Vivid Dotted Path, 100% visible on map)
         segmentsToRender.push({
           mode: 'walk',
           name: 'Walk',
-          modeTypeLabel: 'Pedestrian Sidewalk Connection',
-          color: MODE_COLORS.walk.stroke, // Yellow
+          modeTypeLabel: 'Pedestrian Walkway Connection',
+          color: MODE_COLORS.walk.stroke, // Royal Blue Dots
           isDotted: true,
-          pillText: '10 min walk',
+          pillText: '8 min walk',
           pillIcon: '🚶',
           coords: walkPathCoords,
-          time: 10,
+          time: 8,
           fare: 0,
           trafficBadge: 'Footpath Only',
-          from: `${fromLocation} (Access Point)`,
-          to: `${fromLocation} Transit Counter`,
-          instructions: `Walk ~650m along pedestrian walkway to the main transit stoppage counter.`,
+          from: `${fromLocation} (Initial State)`,
+          to: `${fromLocation} Transit Stoppage`,
+          instructions: `Walk along the dotted path to the main transit stoppage counter.`,
         });
 
         // ── Case A: Direct Metro Route (MRT Line 6) - Shortest & Fastest Path ──
@@ -1008,22 +1050,22 @@ export default function OSMTransitMap({ busTransit, fromLocation, toLocation }) 
       }
       // ── Priority 2: Standalone Direct Single Bus Line (Fallback) ──
       else if (available && buses.length > 0) {
-        // 1. Walk: Yellow (Walk is Yellow, clearly visible)
+        // 1. Walk: Dotted (Crisp blue circular dots)
         segmentsToRender.push({
           mode: 'walk',
           name: 'Walk',
-          modeTypeLabel: 'Pedestrian Sidewalk Connection',
-          color: MODE_COLORS.walk.stroke, // Yellow
+          modeTypeLabel: 'Pedestrian Walkway Connection',
+          color: MODE_COLORS.walk.stroke, // Royal Blue Dots
           isDotted: true,
-          pillText: '10 min walk',
+          pillText: '8 min walk',
           pillIcon: '🚶',
           coords: walkPathCoords,
-          time: 10,
+          time: 8,
           fare: 0,
           trafficBadge: 'Footpath Only',
-          from: `${fromLocation} (Access Point)`,
+          from: `${fromLocation} (Initial State)`,
           to: `${buses[0]?.from_stop || fromLocation} Bus Stand`,
-          instructions: `Walk ~650m to ${buses[0]?.from_stop || fromLocation} bus stand.`,
+          instructions: `Walk along the dotted path to ${buses[0]?.from_stop || fromLocation} bus stand.`,
         });
 
         // 2. Bus: Blue (Bus is Blue)
@@ -1056,40 +1098,78 @@ export default function OSMTransitMap({ busTransit, fromLocation, toLocation }) 
         if (!seg.coords || seg.coords.length < 2) return;
         allPoints = allPoints.concat(seg.coords);
 
-        // ── High-Contrast Walk Line Casing (Walk is Vividly Visible on All Map Backgrounds) ──
         if (seg.isDotted) {
+          // ── Walk Segment: High-visibility circular dots "dotdot......" (Google Maps transit style) ──
+          // 1. Crisp white casing for high contrast on all map tiles
           L.polyline(seg.coords, {
-            color: '#78350f', // Dark amber contrast casing
+            color: '#ffffff',
             weight: 9,
-            opacity: 0.6,
+            opacity: 0.95,
             lineCap: 'round',
             lineJoin: 'round',
           }).addTo(group);
-        }
 
-        // Multi-point polyline following every road curve and corner
-        const poly = L.polyline(seg.coords, {
-          color: seg.color,
-          weight: seg.isDotted ? 5 : (seg.isMetro ? 8 : 7),
-          opacity: 1.0,
-          dashArray: seg.isDotted ? '4, 8' : undefined,
-          lineCap: 'round',
-          lineJoin: 'round',
-        }).addTo(group);
+          // 2. Subtle shadow
+          L.polyline(seg.coords, {
+            color: '#0f172a',
+            weight: 8,
+            opacity: 0.15,
+            lineCap: 'round',
+            lineJoin: 'round',
+          }).addTo(group);
 
-        // Detailed HTML Hover Tooltip (Hovering anywhere on any road line shows rich card)
-        const detailedHtml = createDetailedTooltipHtml(seg);
+          // 3. Perfect circular dots "dotdot......"
+          const poly = L.polyline(seg.coords, {
+            color: '#2563eb', // Royal transit blue
+            weight: 6,
+            opacity: 1.0,
+            dashArray: '0.1, 13', // Produces perfect round dots spaced 13px apart
+            lineCap: 'round',
+            lineJoin: 'round',
+          }).addTo(group);
 
-        poly.bindTooltip(detailedHtml, {
-          sticky: true,
-          direction: 'top',
-          offset: [0, -12],
-          className: 'rich-transit-tooltip',
-          opacity: 1,
-        });
+          // Walk midpoint pill badge so user clearly sees the walk segment
+          const pillIdx = Math.floor(seg.coords.length / 2);
+          const pillCoord = seg.coords[pillIdx];
+          const walkPillMarker = L.marker(pillCoord, {
+            icon: createPillIcon(seg.pillText || '8 min walk', '🚶', '#2563eb'),
+            zIndexOffset: 850,
+          }).addTo(group);
 
-        // Floating Pill Marker for Transit Segments (Excluded from walk to eliminate Start Pin collision)
-        if (!seg.isDotted) {
+          const detailedHtml = createDetailedTooltipHtml(seg);
+          poly.bindTooltip(detailedHtml, {
+            sticky: true,
+            direction: 'top',
+            offset: [0, -12],
+            className: 'rich-transit-tooltip',
+            opacity: 1,
+          });
+          walkPillMarker.bindTooltip(detailedHtml, {
+            direction: 'top',
+            offset: [0, -22],
+            className: 'rich-transit-tooltip',
+            opacity: 1,
+          });
+        } else {
+          // Multi-point polyline following every road curve and corner
+          const poly = L.polyline(seg.coords, {
+            color: seg.color,
+            weight: seg.isMetro ? 8 : 7,
+            opacity: 1.0,
+            lineCap: 'round',
+            lineJoin: 'round',
+          }).addTo(group);
+
+          const detailedHtml = createDetailedTooltipHtml(seg);
+          poly.bindTooltip(detailedHtml, {
+            sticky: true,
+            direction: 'top',
+            offset: [0, -12],
+            className: 'rich-transit-tooltip',
+            opacity: 1,
+          });
+
+          // Floating Pill Marker for Transit Segments
           const pillIdx = Math.floor(seg.coords.length / 2);
           const pillCoord = seg.coords[pillIdx];
 
@@ -1107,24 +1187,63 @@ export default function OSMTransitMap({ busTransit, fromLocation, toLocation }) 
         }
       });
 
-      // ── 4. Add Start Pin & Finish Flag (Clearly Separated, Never Overlapped) ──
+      // ── Transit Stoppage Boarding Node (Connection between walk dots and bus route) ──
+      const busBoardMarker = L.circleMarker(originCoord, {
+        radius: 6,
+        color: '#2563eb',
+        fillColor: '#ffffff',
+        fillOpacity: 1,
+        weight: 3.5,
+        zIndexOffset: 950,
+      }).addTo(group);
+
+      busBoardMarker.bindTooltip(
+        `<div style="font-family:'Inter',sans-serif;font-size:11.5px;color:#0f172a;padding:4px 6px;">
+          <b>🚏 Board Transit:</b> ${fromLocation} Stoppage
+        </div>`,
+        { direction: 'top', offset: [0, -10], className: 'rich-transit-tooltip' }
+      );
+
+      // ── 4. Add Start Pin (Green) & Destination Pin (Red) like home map (NO FLAG) ──
       L.marker(walkStartCoord, {
-        icon: createStartPinIcon(fromLocation),
+        icon: makePin('#16a34a', fromLocation),
         zIndexOffset: 1000,
-      }).addTo(group).bindTooltip(`<b>Start Location:</b> ${fromLocation}<br/><span style="font-size:11px;color:#f59e0b;font-weight:700;">🚶 Walk ~650m to transit stoppage (Hover yellow line for details)</span>`, {
-        direction: 'top',
-        offset: [0, -42],
-        className: 'rich-transit-tooltip'
-      });
+      }).addTo(group).bindTooltip(
+        `<div style="font-family:'Inter',sans-serif;font-size:12px;color:#0f172a;line-height:1.4;">
+          <div style="font-weight:800;color:#16a34a;display:flex;align-items:center;gap:4px;">
+            <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#16a34a;"></span>
+            ${fromLocation} (Start)
+          </div>
+          <div style="font-size:11px;color:#475569;margin-top:2px;">
+            🚶 Walk along dotted path to bus counter
+          </div>
+        </div>`,
+        {
+          direction: 'top',
+          offset: [0, -38],
+          className: 'rich-transit-tooltip',
+        }
+      );
 
       L.marker(destCoord, {
-        icon: createFinishFlagIcon(toLocation),
+        icon: makePin('#dc2626', toLocation),
         zIndexOffset: 1000,
-      }).addTo(group).bindTooltip(`<b>Destination:</b> ${toLocation}<br/><span style="font-size:11px;color:#16a34a;font-weight:700;">Final Stop 🏁</span>`, {
-        direction: 'top',
-        offset: [0, -42],
-        className: 'rich-transit-tooltip'
-      });
+      }).addTo(group).bindTooltip(
+        `<div style="font-family:'Inter',sans-serif;font-size:12px;color:#0f172a;line-height:1.4;">
+          <div style="font-weight:800;color:#dc2626;display:flex;align-items:center;gap:4px;">
+            <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#dc2626;"></span>
+            ${toLocation} (Destination)
+          </div>
+          <div style="font-size:11px;color:#475569;margin-top:2px;">
+            Final Destination Stop
+          </div>
+        </div>`,
+        {
+          direction: 'top',
+          offset: [0, -38],
+          className: 'rich-transit-tooltip',
+        }
+      );
 
       // ── 5. Fit Bounds ──
       if (allPoints.length > 0) {
@@ -1252,8 +1371,12 @@ export default function OSMTransitMap({ busTransit, fromLocation, toLocation }) 
         {/* Legend Overlay Bar with Exact Mode Colors Specified by User */}
         <div className="absolute bottom-3 left-3 z-20 bg-white/95 backdrop-blur-md px-3.5 py-2.5 rounded-xl border border-slate-200 shadow-md text-xs flex flex-wrap items-center gap-3.5">
           <div className="flex items-center gap-1.5">
-            <span className="w-4 h-1 border-t-2 border-dashed border-amber-500 inline-block"></span>
-            <span className="text-[11px] font-bold text-amber-700">Walk 🚶 (Yellow)</span>
+            <span className="w-2.5 h-2.5 rounded-full bg-emerald-600 inline-block shadow-2xs"></span>
+            <span className="text-[11px] font-bold text-emerald-700">Start (Green Pin)</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="tracking-widest font-extrabold text-blue-600 inline-block text-[12px] leading-none">••••</span>
+            <span className="text-[11px] font-bold text-blue-700">Walk 🚶 (Dotted)</span>
           </div>
           <div className="flex items-center gap-1.5">
             <span className="w-3.5 h-1.5 bg-blue-600 rounded-sm inline-block"></span>
@@ -1265,11 +1388,15 @@ export default function OSMTransitMap({ busTransit, fromLocation, toLocation }) 
           </div>
           <div className="flex items-center gap-1.5">
             <span className="w-3.5 h-1.5 bg-emerald-600 rounded-sm inline-block"></span>
-            <span className="text-[11px] font-bold text-emerald-700">CNG / Rickshaw 🛺 🚲 (Green)</span>
+            <span className="text-[11px] font-bold text-emerald-700">CNG / Rickshaw 🛺 (Green)</span>
           </div>
           <div className="flex items-center gap-1.5">
             <span className="w-3.5 h-1.5 bg-purple-600 rounded-sm inline-block"></span>
             <span className="text-[11px] font-bold text-purple-700">2nd Bus 🚌 (Purple)</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="w-2.5 h-2.5 rounded-full bg-red-600 inline-block shadow-2xs"></span>
+            <span className="text-[11px] font-bold text-red-700">Destination (Red Pin)</span>
           </div>
           <span className="text-[10px] text-slate-400 italic">
             • Hover over any line or pill to view full bus & transit details

@@ -774,21 +774,16 @@ export default function IsometricTransitMap({ busTransit, fromLocation, toLocati
                   </text>
                 </g>
 
-                {/* DESTINATION FINISH: Checkered Flag */}
-                <g transform="translate(820, 440)">
-                  <ellipse cx="20" cy="54" rx="18" ry="6" fill="rgba(0,0,0,0.4)" />
-                  {/* Flagpole */}
-                  <line x1="12" y1="10" x2="12" y2="54" stroke="#e2e8f0" strokeWidth="3.5" strokeLinecap="round" />
-                  {/* Checkered Flag Graphic */}
-                  <rect x="12" y="10" width="10" height="8" fill="#ffffff" />
-                  <rect x="22" y="10" width="10" height="8" fill="#0f172a" />
-                  <rect x="12" y="18" width="10" height="8" fill="#0f172a" />
-                  <rect x="22" y="18" width="10" height="8" fill="#ffffff" />
-                  <rect x="12" y="10" width="20" height="16" fill="none" stroke="#0f172a" strokeWidth="1.5" />
+                {/* DESTINATION PIN: Red Teardrop Pin (No Flag) */}
+                <g transform="translate(820, 430)">
+                  <ellipse cx="16" cy="40" rx="14" ry="5" fill="rgba(0,0,0,0.35)" />
+                  <path fill="#dc2626" stroke="#ffffff" strokeWidth="2.5"
+                    d="M16 1.5 C8.2 1.5 2 7.7 2 15.5 C2 25.5 16 38.5 16 38.5 C16 38.5 30 25.5 30 15.5 C30 7.7 23.8 1.5 16 1.5Z" />
+                  <circle cx="16" cy="15.5" r="5.5" fill="#ffffff" />
                   {/* Destination Name Tag */}
-                  <rect x="-35" y="58" width="110" height="22" rx="6" fill="#0f172a" stroke="#22c55e" strokeWidth="1.5" />
-                  <text x="20" y="73" fill="#4ade80" fontSize="11" fontWeight="extrabold" textAnchor="middle">
-                    🏁 {toLocation}
+                  <rect x="-35" y="44" width="110" height="22" rx="6" fill="#0f172a" stroke="#dc2626" strokeWidth="1.5" />
+                  <text x="20" y="59" fill="#f87171" fontSize="11" fontWeight="extrabold" textAnchor="middle">
+                    {toLocation}
                   </text>
                 </g>
               </svg>

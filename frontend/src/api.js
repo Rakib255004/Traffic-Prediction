@@ -469,3 +469,50 @@ function calcHaversineKm(c1, c2) {
             Math.sin(dLon / 2) ** 2;
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
+
+export async function fetchRlStatus() {
+  try {
+    const res = await fetchWithTimeout(`${API_BASE}/rl/status`);
+    if (res.ok) {
+      const json = await res.json();
+      if (json && json.success) return json.data;
+    }
+  } catch (err) {
+    console.warn('[API] /api/rl/status fetch error:', err.message);
+  }
+  return null;
+}
+
+export async function evaluateRlNow(currentPrediction = null, limit = 5) {
+  try {
+    const res = await fetchWithTimeout(`${API_BASE}/rl/evaluate-now`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ currentPrediction, limit })
+    });
+    if (res.ok) {
+      const json = await res.json();
+      if (json && json.success) return json.data;
+    }
+  } catch (err) {
+    console.warn('[API] /api/rl/evaluate-now error:', err.message);
+  }
+  return null;
+}
+
+export async function run10HourSimulationApi(params = {}) {
+  try {
+    const res = await fetchWithTimeout(`${API_BASE}/rl/simulate-10h`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(params)
+    });
+    if (res.ok) {
+      const json = await res.json();
+      if (json && json.success) return json.data;
+    }
+  } catch (err) {
+    console.warn('[API] /api/rl/simulate-10h error:', err.message);
+  }
+  return null;
+}

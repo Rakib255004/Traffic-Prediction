@@ -19,6 +19,8 @@ import {
 import { NODE_COORDINATES, DHAKA_BYPASS_WAYPOINTS, haversineKm } from './routesConfig.js';
 import { buildOsmRouteGeometry } from './osmRouter.js';
 import { getAllBuses, getBusById, getBusStops, findBusesBetween } from './busService.js';
+import { supabase, checkDatabaseHealth } from './db.js';
+import { getRlStatus, evaluatePendingPredictions, startRlBackgroundWorker, run10HourTrainingSimulation } from './rlEngine.js';
 
 // Resilient compression import (safe if module not present)
 let compression = null;
@@ -347,6 +349,61 @@ app.post('/api/predict-journey', async (req, res) => {
   try {
     const { date, day, time, from, to } = req.body || {};
     const result = await predictJourneyService({ date, day, time, from, to });
+
+    // Asynchronously log journey prediction to PostgreSQL (non-blocking)
+    if (supabase && result) {
+      supabase.from('journey_predictions_log').insert({
+        from_location: from || 'Unknown',
+        to_location: to || 'Unknown',
+        predicted_level: result.traffic_prediction || null,
+        travel_time_min: result.primary_route?.travel_time_min || null,
+        traffic_delay_min: result.primary_route?.traffic_delay_min || null,
+        distance_km: result.primary_route?.distance_km || null,
+      }).then(() => {}).catch(e => console.warn('[Database] Failed to log journey prediction:', e.message));
+    }
+
+    res.json({ success: true, data: result });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 7b1. PostgreSQL Database Health & Overview
+app.get('/api/database/status', async (req, res) => {
+  try {
+    const health = await checkDatabaseHealth();
+    res.json({ success: true, data: health });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 7b2. Reinforcement Learning Engine Status & Verification Metrics
+app.get('/api/rl/status', async (req, res) => {
+  try {
+    const status = await getRlStatus();
+    res.json({ success: true, data: status });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 7b3. Trigger Immediate Ground-Truth Evaluation against Google Maps Live API
+app.post('/api/rl/evaluate-now', async (req, res) => {
+  try {
+    const { limit = 5, currentPrediction = null } = req.body || {};
+    const result = await evaluatePendingPredictions({ currentPrediction, limit, forceImmediate: true });
+    res.json({ success: true, data: result });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 7b4. 10-Hour Continuous Multi-Route Reinforcement Training Simulation
+app.post('/api/rl/simulate-10h', async (req, res) => {
+  try {
+    const { corridorsCount = 5, startHour = 8, hoursCount = 10 } = req.body || {};
+    const result = await run10HourTrainingSimulation({ corridorsCount, startHour, hoursCount });
     res.json({ success: true, data: result });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -677,6 +734,8 @@ const HOST = process.env.HOST || '0.0.0.0';
 
 const server = app.listen(PORT, HOST, () => {
   console.log(`🚀 Dhaka Traffic Node.js API Server running on http://127.0.0.1:${PORT} and http://localhost:${PORT}`);
+  // Start continuous reinforcement learning evaluation worker
+  startRlBackgroundWorker(3 * 60 * 1000);
 });
 
 // Graceful shutdown

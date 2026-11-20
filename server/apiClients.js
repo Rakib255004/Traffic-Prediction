@@ -163,10 +163,14 @@ export class GoogleRoutesClient {
         } else {
           const errText = await res.text();
           if (res.status === 429 || res.status === 403) {
-            this.exhaustedKeys.set(availableKey, Date.now() + 30 * 60 * 1000);
+            this.exhaustedKeys.set(currentKey, Date.now() + 30 * 60 * 1000);
             if (!this.quotaWarned) {
               console.warn(`[Google API] Key reached quota (${res.status}). Switching to available keys or OSRM fallback.`);
             }
+          } else if (res.status === 400 || errText.includes('API_KEY_INVALID') || errText.includes('expired')) {
+            // Expired or invalid key: put on 24-hour cooldown so we never waste time trying it again
+            this.exhaustedKeys.set(currentKey, Date.now() + 24 * 60 * 60 * 1000);
+            console.warn(`[Google API] Key invalid or expired (${res.status}). Key disabled for 24h.`);
           } else {
             console.warn(`[Google API] Key returned status ${res.status}: ${errText}`);
           }

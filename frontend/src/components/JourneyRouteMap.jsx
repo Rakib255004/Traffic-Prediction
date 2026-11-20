@@ -84,6 +84,50 @@ const badgeHtml = (level) => {
   return `<span style="display:inline-block;padding:2px 9px;border-radius:999px;background:${col};color:#fff;font-size:11px;font-weight:700">${level} Traffic</span>`;
 };
 
+// ── Road curve snapping utilities (Zero straight-line cuts across city) ───────
+const clientOsrmCache = new Map();
+
+const haversineKm = (a, b) => {
+  if (!a || !b) return 0;
+  const R = 6371;
+  const dLat = ((b[0] - a[0]) * Math.PI) / 180;
+  const dLon = ((b[1] - a[1]) * Math.PI) / 180;
+  const x = Math.sin(dLat / 2) ** 2 + Math.cos((a[0] * Math.PI) / 180) * Math.cos((b[0] * Math.PI) / 180) * Math.sin(dLon / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x));
+};
+
+const hasStraightJump = (coords, maxGapKm = 0.5) => {
+  if (!Array.isArray(coords) || coords.length < 10) return true;
+  for (let i = 1; i < coords.length; i++) {
+    if (haversineKm(coords[i - 1], coords[i]) > maxGapKm) return true;
+  }
+  return false;
+};
+
+async function fetchClientRoadCurve(waypoints) {
+  if (!Array.isArray(waypoints) || waypoints.length < 2) return null;
+  const key = waypoints.map(w => `${Number(w[0]).toFixed(4)},${Number(w[1]).toFixed(4)}`).join(';');
+  if (clientOsrmCache.has(key)) return clientOsrmCache.get(key);
+
+  try {
+    const wpStr = waypoints.map(w => `${Number(w[1])},${Number(w[0])}`).join(';');
+    const url = `https://router.project-osrm.org/route/v1/driving/${wpStr}?overview=full&geometries=geojson`;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 6000);
+    const res = await fetch(url, { signal: controller.signal });
+    clearTimeout(timer);
+    if (!res.ok) return null;
+    const json = await res.json();
+    const r = json?.routes?.[0];
+    if (r?.geometry?.coordinates?.length >= 2) {
+      const coords = r.geometry.coordinates.map(([lon, lat]) => [lat, lon]);
+      clientOsrmCache.set(key, coords);
+      return coords;
+    }
+  } catch (_) {}
+  return null;
+}
+
 // ── Component ─────────────────────────────────────────────────────────────────
 export default function JourneyRouteMap({
   fromLocation,
@@ -109,6 +153,8 @@ export default function JourneyRouteMap({
   const [altMenuOpen, setAltMenuOpen]       = useState(false);
   const [showCorridors, setShowCorridors]   = useState(true);
   const [corridorsData, setCorridorsData]   = useState(null);
+  const [refinedRoadMap, setRefinedRoadMap] = useState({});
+  const [mobileLegendOpen, setMobileLegendOpen] = useState(false);
 
   // Resolve available 2-3 alternatives cleanly
   const resolvedAlts = alternativeRoutes?.length
@@ -116,6 +162,58 @@ export default function JourneyRouteMap({
     : alternativeRoute
     ? [alternativeRoute]
     : [];
+
+  // ── Auto-refine straight-line coordinates into exact street road curves ──────
+  useEffect(() => {
+    let active = true;
+    const origCoords = primaryRoute?.origin_coords || NODE_COORDINATES[fromLocation] || [23.8069, 90.3687];
+    const destCoords = primaryRoute?.dest_coords || NODE_COORDINATES[toLocation] || [23.7570, 90.3888];
+
+    // Primary route check
+    const primCoords = primaryRoute?.road_coords;
+    if (primCoords && hasStraightJump(primCoords, 0.5)) {
+      const cps = (primaryRoute?.checkpoints || []).map(c => c.coords).filter(Boolean);
+      const wps = [origCoords, ...cps, destCoords];
+      fetchClientRoadCurve(wps).then(curve => {
+        if (active && curve && curve.length >= 8) {
+          setRefinedRoadMap(prev => ({ ...prev, primary: curve }));
+        }
+      });
+    }
+
+    // Alternative routes check
+    resolvedAlts.forEach((alt, idx) => {
+      const key = alt.id || `alt-${idx}`;
+      const altCoords = alt.road_coords;
+      if (!altCoords || hasStraightJump(altCoords, 0.5)) {
+        const altWps = alt.waypoints || (alt.coords ? [origCoords, alt.coords, destCoords] : [origCoords, destCoords]);
+        fetchClientRoadCurve(altWps).then(curve => {
+          if (active && curve && curve.length >= 8) {
+            setRefinedRoadMap(prev => ({ ...prev, [key]: curve }));
+          }
+        });
+      }
+    });
+
+    return () => { active = false; };
+  }, [primaryRoute, resolvedAlts, fromLocation, toLocation]);
+
+  // ── Auto-resize Leaflet map smoothly for Phone, Tablet, Laptop, and PC ────────
+  useEffect(() => {
+    if (!containerRef.current || !mapRef.current) return;
+    const ro = new ResizeObserver(() => {
+      mapRef.current?.invalidateSize();
+    });
+    ro.observe(containerRef.current);
+    const handleWinResize = () => {
+      mapRef.current?.invalidateSize();
+    };
+    window.addEventListener('resize', handleWinResize);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener('resize', handleWinResize);
+    };
+  }, []);
 
   // ── 1. Initialize Leaflet Map Once ──────────────────────────────────────────
   useEffect(() => {
@@ -272,11 +370,18 @@ export default function JourneyRouteMap({
       const st = ALT_STYLES[idx % ALT_STYLES.length];
       const isSelected = selectedAltIndex === idx;
       const paneName = isSelected ? 'selectedRoutePane' : 'unselectedRoutePane';
-      const rawPts = alt.road_coords?.length >= 2
+      const key = alt.id || `alt-${idx}`;
+      const refined = refinedRoadMap[key];
+      const rawPts = (refined && refined.length >= 8)
+        ? refined
+        : (alt.road_coords?.length >= 10 && !hasStraightJump(alt.road_coords, 0.6))
         ? alt.road_coords
-        : alt.coords
-        ? [origCoords, alt.coords, destCoords]
-        : [origCoords, destCoords];
+        : (alt.coords ? [origCoords, alt.coords, destCoords] : [origCoords, destCoords]);
+
+      // If coordinates still have straight line cuts across blocks before OSRM responds, do not draw straight line
+      if (hasStraightJump(rawPts, 0.7) && !refined) {
+        return;
+      }
 
       const pts = rawPts.map(p => [...p]);
       if (pts.length >= 2) {
@@ -368,9 +473,9 @@ export default function JourneyRouteMap({
     // Automatically adjust map bounds so the selected alternative route is fully visible
     if (selectedAltBounds && selectedAltBounds.length > 1) {
       map.invalidateSize();
-      map.fitBounds(L.latLngBounds(selectedAltBounds), { padding: [55, 55], maxZoom: 14.5 });
+      map.fitBounds(L.latLngBounds(selectedAltBounds), { padding: [45, 45], maxZoom: 14.5 });
     }
-  }, [showAlternative, resolvedAlts, selectedAltIndex, primaryRoute, fromLocation, toLocation, onSelectAlternative]);
+  }, [showAlternative, resolvedAlts, selectedAltIndex, primaryRoute, fromLocation, toLocation, onSelectAlternative, refinedRoadMap]);
 
   // ── 5. Render Primary Route Segments, Markers, Labels, & Hotspots ───────────
   useEffect(() => {
@@ -436,18 +541,22 @@ export default function JourneyRouteMap({
 
     // 1. Subtle dark shadow & crisp white halo under the primary route
     let fullCoords = [];
-    segments.forEach((seg) => {
-      seg.coordinates.forEach((pt) => {
-        if (fullCoords.length === 0) {
-          fullCoords.push(pt);
-        } else {
-          const prev = fullCoords[fullCoords.length - 1];
-          if (Math.hypot(prev[0] - pt[0], prev[1] - pt[1]) > 0.00001) {
+    if (refinedRoadMap['primary'] && refinedRoadMap['primary'].length >= 8) {
+      fullCoords = refinedRoadMap['primary'];
+    } else {
+      segments.forEach((seg) => {
+        seg.coordinates.forEach((pt) => {
+          if (fullCoords.length === 0) {
             fullCoords.push(pt);
+          } else {
+            const prev = fullCoords[fullCoords.length - 1];
+            if (Math.hypot(prev[0] - pt[0], prev[1] - pt[1]) > 0.00001) {
+              fullCoords.push(pt);
+            }
           }
-        }
+        });
       });
-    });
+    }
 
     if (fullCoords.length < 2) {
       fullCoords = [origCoords, destCoords];
@@ -538,16 +647,41 @@ export default function JourneyRouteMap({
     // 3. Intermediate intersection dots + alternating clean pill labels (following selected route)
     const activeRouteObj = isAltActive ? resolvedAlts[selectedAltIndex] : primaryRoute;
     const activeWaypointColor = isAltActive ? (ALT_STYLES[selectedAltIndex]?.color || '#64748b') : '#2563eb';
+    const activeRoadCoords = isAltActive
+      ? (refinedRoadMap[resolvedAlts[selectedAltIndex]?.id || `alt-${selectedAltIndex}`] || resolvedAlts[selectedAltIndex]?.road_coords || fullCoords)
+      : fullCoords;
+
     const checkpoints = activeRouteObj?.checkpoints || [];
     checkpoints.forEach((cp, idx) => {
-      if (!cp.coords) return;
+      if (!cp.coords || !Array.isArray(cp.coords) || cp.coords.length < 2) return;
+
+      // Double-safety client snap: snap marker position directly to the nearest vertex of activeRoadCoords
+      let renderCoords = cp.coords;
+      if (activeRoadCoords && activeRoadCoords.length > 0) {
+        let bestDistSq = Infinity;
+        let bestPt = null;
+        for (let i = 0; i < activeRoadCoords.length; i++) {
+          const pt = activeRoadCoords[i];
+          const dLat = pt[0] - cp.coords[0];
+          const dLng = pt[1] - cp.coords[1];
+          const dSq = dLat * dLat + dLng * dLng;
+          if (dSq < bestDistSq) {
+            bestDistSq = dSq;
+            bestPt = pt;
+          }
+        }
+        if (bestPt) {
+          renderCoords = bestPt;
+        }
+      }
+
       const side = idx % 2 === 0 ? 'left' : 'right';
-      const offsetX = side === 'left' ? -8 : 8;
-      L.circleMarker(cp.coords, {
-        radius: 5,
-        fillColor: activeWaypointColor,
-        color: '#ffffff',
-        weight: 2,
+      const offsetX = side === 'left' ? -10 : 10;
+      L.circleMarker(renderCoords, {
+        radius: 5.5,
+        fillColor: '#ffffff',
+        color: activeWaypointColor,
+        weight: 3,
         opacity: 1,
         fillOpacity: 1,
         pane: 'selectedRoutePane',
@@ -561,7 +695,7 @@ export default function JourneyRouteMap({
         .bindPopup(
           popupShell(`
             <div style="font-weight:700;font-size:13px">${cp.name}</div>
-            <div style="color:#64748b;font-size:11px;margin-top:2px">Intermediate waypoint along ${isAltActive ? (activeRouteObj?.route_name || `Alternative ${selectedAltIndex + 1}`) : `${fromLocation} → ${toLocation}`}</div>
+            <div style="color:#64748b;font-size:11px;margin-top:2px">Intermediate waypoint along ${isAltActive ? (activeRouteObj?.name || activeRouteObj?.route_name || `Alternative ${selectedAltIndex + 1}`) : `${fromLocation} → ${toLocation}`}</div>
           `)
         )
         .addTo(rl);
@@ -690,9 +824,9 @@ export default function JourneyRouteMap({
     // 7. Auto-center & fit tightly to the journey route when Primary is selected
     if (isPrimarySelected && bounds.length > 1) {
       map.invalidateSize();
-      map.fitBounds(L.latLngBounds(bounds), { padding: [55, 55], maxZoom: 14.5 });
+      map.fitBounds(L.latLngBounds(bounds), { padding: [45, 45], maxZoom: 14.5 });
     }
-  }, [fromLocation, toLocation, primaryRoute, showAlternative, selectedAltIndex, resolvedAlts.length, onSelectAlternative, trafficPrediction, selectedDate, selectedTime]);
+  }, [fromLocation, toLocation, primaryRoute, showAlternative, selectedAltIndex, resolvedAlts.length, onSelectAlternative, trafficPrediction, selectedDate, selectedTime, refinedRoadMap]);
 
   // Ensure Leaflet adjusts size cleanly on resize
   useEffect(() => {
@@ -739,35 +873,35 @@ export default function JourneyRouteMap({
     : 'Primary Route';
 
   return (
-    <div className="relative w-full h-[520px] sm:h-[620px] lg:h-[670px] bg-slate-100 clean-traffic-map">
+    <div className="relative w-full h-[420px] sm:h-[500px] md:h-[580px] lg:h-[640px] xl:h-[680px] bg-slate-100 clean-traffic-map rounded-2xl overflow-hidden border border-slate-200/90 shadow-sm">
 
       {/* ── Map Canvas ──────────────────────────────────────────────────────── */}
       <div ref={containerRef} className="absolute inset-0 w-full h-full z-0" />
 
       {/* ── Top-Left Compact Floating Route Info Panel ──────────────────────── */}
       {fromLocation && toLocation && (
-        <div ref={altPanelRef} className="absolute top-3 left-3 z-[500] bg-white/95 backdrop-blur-md border border-slate-200/90 rounded-2xl shadow-lg w-[255px] sm:w-[280px] overflow-hidden">
-          <div className="px-4 py-3 space-y-1.5">
+        <div ref={altPanelRef} className="absolute top-2.5 sm:top-3 left-2.5 sm:left-3 z-[500] bg-white/95 backdrop-blur-md border border-slate-200/90 rounded-2xl shadow-lg w-[235px] sm:w-[275px] max-w-[calc(100vw-24px)] overflow-hidden">
+          <div className="px-3 py-2.5 sm:px-4 sm:py-3 space-y-1 sm:space-y-1.5">
             {/* Active route badge */}
-            <div className="flex items-center justify-between gap-2">
-              <span className="inline-flex items-center gap-1.5 text-[11px] font-bold text-slate-700 truncate">
+            <div className="flex items-center justify-between gap-1.5">
+              <span className="inline-flex items-center gap-1.5 text-[10px] sm:text-[11px] font-bold text-slate-700 truncate">
                 <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: activeColor }} />
                 <span className="truncate">{activeLabel}</span>
               </span>
               <span
-                className="px-1.5 py-0.5 rounded text-[10px] font-bold text-white shrink-0"
+                className="px-1.5 py-0.5 rounded text-[9px] sm:text-[10px] font-bold text-white shrink-0"
                 style={{ backgroundColor: TRAFFIC_COLORS[activeLevel] || TRAFFIC_COLORS.Low }}
               >
                 {activeLevel}
               </span>
             </div>
 
-            <div className="text-sm font-bold text-slate-800 leading-snug">
+            <div className="text-xs sm:text-sm font-bold text-slate-800 leading-snug">
               {isEstimate ? 'Est. Time' : 'Travel Time'}: {eta ?? '—'} min{' '}
               <span className="font-semibold text-slate-500">({dist ?? '—'} km)</span>
             </div>
 
-            <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs">
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] sm:text-xs">
               {delay > 0 ? (
                 <span className="font-semibold text-red-600">
                   +{delay} min est. delay
@@ -797,7 +931,7 @@ export default function JourneyRouteMap({
 
             {/* Alternative Routes dropdown button */}
             {resolvedAlts.length > 0 && (
-              <div className="pt-1">
+              <div className="pt-0.5">
                 <button
                   type="button"
                   onClick={() => {
@@ -807,7 +941,7 @@ export default function JourneyRouteMap({
                       onToggleAlternative(true);
                     }
                   }}
-                  className={`w-full flex items-center justify-between px-3 py-1.5 rounded-xl text-xs font-semibold border transition ${
+                  className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-xl text-[11px] sm:text-xs font-semibold border transition ${
                     showAlternative
                       ? 'bg-blue-50 text-blue-700 border-blue-200'
                       : 'bg-slate-50 text-blue-600 border-slate-200 hover:bg-blue-50'
@@ -827,7 +961,7 @@ export default function JourneyRouteMap({
 
           {/* Expandable Route & Alternative Selector List */}
           {altMenuOpen && resolvedAlts.length > 0 && (
-            <div className="border-t border-slate-100 bg-slate-50/80 px-3 py-2 space-y-1.5 max-h-64 overflow-y-auto">
+            <div className="border-t border-slate-100 bg-slate-50/80 px-2.5 py-2 sm:px-3 space-y-1.5 max-h-52 sm:max-h-64 overflow-y-auto">
               {/* Primary route option */}
               <button
                 type="button"
@@ -922,57 +1056,70 @@ export default function JourneyRouteMap({
       )}
 
       {/* ── Top-Right Monitored Network Toggle ──────────────────────────────── */}
-      <div className="absolute top-3 right-3 z-[500]">
+      <div className="absolute top-2.5 sm:top-3 right-2.5 sm:right-3 z-[500]">
         <button
           type="button"
           onClick={() => setShowCorridors(v => !v)}
           title="Toggle verified telemetry overlay for Dhaka's 50 official monitored corridors"
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border shadow-sm backdrop-blur-md transition ${
+          className={`flex items-center gap-1.5 px-2 py-1 sm:px-3 sm:py-1.5 rounded-xl text-[10px] sm:text-xs font-semibold border shadow-sm backdrop-blur-md transition ${
             showCorridors
               ? 'bg-white/95 text-slate-700 border-slate-200'
               : 'bg-white/80 text-slate-400 border-slate-200/70'
           }`}
         >
           <span className={`w-2 h-2 rounded-full ${showCorridors ? 'bg-green-500' : 'bg-slate-300'}`} />
-          <span>Monitored Corridors</span>
+          <span><span className="hidden sm:inline">Monitored </span>Corridors</span>
         </button>
       </div>
 
-      {/* ── Bottom-Left Compact Traffic & Route Legend ──────────────────────── */}
-      <div className="absolute bottom-4 left-3 z-[500] bg-white/95 backdrop-blur-md border border-slate-200 rounded-xl shadow-md px-3.5 py-2.5">
-        <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
-          Traffic Level
-        </p>
-        <div className="space-y-1">
-          {[
-            { label: 'Low',       color: TRAFFIC_COLORS.Low },
-            { label: 'Moderate',  color: TRAFFIC_COLORS.Medium },
-            { label: 'High',      color: TRAFFIC_COLORS.High },
-          ].map(({ label, color }) => (
-            <div key={label} className="flex items-center gap-2">
-              <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: color }} />
-              <span className="text-xs font-medium text-slate-700">{label}</span>
-            </div>
-          ))}
-        </div>
+      {/* ── Bottom-Left Compact Traffic & Route Legend (Responsive Collapsible on Mobile) ── */}
+      <div className="absolute bottom-2.5 sm:bottom-4 left-2.5 sm:left-3 z-[500]">
+        {/* Mobile quick pill toggle */}
+        <button
+          type="button"
+          onClick={() => setMobileLegendOpen(v => !v)}
+          className="sm:hidden flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white/95 backdrop-blur-md border border-slate-200 text-[10px] font-bold text-slate-700 shadow-sm"
+        >
+          <span>ℹ Legend</span>
+          <span className="text-[9px] text-slate-400">{mobileLegendOpen ? '▼' : '▲'}</span>
+        </button>
 
-        <div className="mt-2 pt-1.5 border-t border-slate-100 space-y-1">
-          <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
-            Routes
+        {/* Legend container: always visible on desktop (sm:block), toggleable on mobile */}
+        <div className={`${mobileLegendOpen ? 'block mt-1' : 'hidden'} sm:block bg-white/95 backdrop-blur-md border border-slate-200 rounded-xl shadow-md p-2 sm:px-3 sm:py-2.5 max-w-[170px] sm:max-w-[210px]`}>
+          <p className="text-[9px] sm:text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">
+            Traffic Level
           </p>
-          <div className="flex items-center gap-2">
-            <span className="w-3.5 h-1 rounded shrink-0" style={{ backgroundColor: PRIMARY_ROUTE_COLOR }} />
-            <span className="text-[11px] font-medium text-slate-700">Primary</span>
-          </div>
-          {showAlternative && resolvedAlts.map((alt, idx) => {
-            const st = ALT_STYLES[idx % ALT_STYLES.length];
-            return (
-              <div key={alt.id || idx} className="flex items-center gap-2">
-                <span className="w-3.5 h-1 rounded shrink-0" style={{ backgroundColor: st.color }} />
-                <span className="text-[11px] font-medium text-slate-600">{st.label} ({st.name})</span>
+          <div className="space-y-0.5 sm:space-y-1">
+            {[
+              { label: 'Low',       color: TRAFFIC_COLORS.Low },
+              { label: 'Moderate',  color: TRAFFIC_COLORS.Medium },
+              { label: 'High',      color: TRAFFIC_COLORS.High },
+            ].map(({ label, color }) => (
+              <div key={label} className="flex items-center gap-1.5 sm:gap-2">
+                <span className="w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-full shrink-0" style={{ backgroundColor: color }} />
+                <span className="text-[10px] sm:text-xs font-medium text-slate-700">{label}</span>
               </div>
-            );
-          })}
+            ))}
+          </div>
+
+          <div className="mt-1.5 pt-1 border-t border-slate-100 space-y-0.5 sm:space-y-1">
+            <p className="text-[9px] sm:text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-0.5">
+              Routes
+            </p>
+            <div className="flex items-center gap-1.5 sm:gap-2">
+              <span className="w-3 sm:w-3.5 h-1 rounded shrink-0" style={{ backgroundColor: PRIMARY_ROUTE_COLOR }} />
+              <span className="text-[10px] sm:text-[11px] font-medium text-slate-700">Primary</span>
+            </div>
+            {showAlternative && resolvedAlts.map((alt, idx) => {
+              const st = ALT_STYLES[idx % ALT_STYLES.length];
+              return (
+                <div key={alt.id || idx} className="flex items-center gap-1.5 sm:gap-2">
+                  <span className="w-3 sm:w-3.5 h-1 rounded shrink-0" style={{ backgroundColor: st.color }} />
+                  <span className="text-[10px] sm:text-[11px] font-medium text-slate-600 truncate">{st.label} ({st.name})</span>
+                </div>
+              );
+            })}
+          </div>
         </div>
       </div>
     </div>
