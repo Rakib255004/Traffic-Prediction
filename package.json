@@ -12,6 +12,7 @@
     "build": "vite build frontend",
     "start": "node server/index.js",
     "preview": "vite preview frontend",
+    "deploy:firebase": "npm run build && firebase deploy --only hosting",
     "data:collect": "python data_collection/collect_data.py",
     "data:advisor": "python data_collection/route_advisor.py",
     "data:restore": "python data_collection/restore_data.py"
