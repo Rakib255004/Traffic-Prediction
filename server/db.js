@@ -1,4 +1,3 @@
-import { createClient } from '@supabase/supabase-js';
 import dotenv from 'dotenv';
 dotenv.config();
 
@@ -9,15 +8,16 @@ export let supabase = null;
 
 if (SUPABASE_URL && SUPABASE_ANON_KEY) {
   try {
+    const { createClient } = await import('@supabase/supabase-js');
     supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
       auth: { persistSession: false },
     });
     console.log('[Database] PostgreSQL (Supabase) client initialized successfully.');
   } catch (err) {
-    console.error('[Database] Failed to initialize Supabase client:', err.message);
+    console.warn('[Database] Supabase client initialization skipped (' + err.message + '). Operating in local file mode.');
   }
 } else {
-  console.warn('[Database] SUPABASE_URL or SUPABASE_ANON_KEY not set. Operating in local file mode.');
+  console.log('[Database] Operating in local CSV file mode (SUPABASE_URL not configured).');
 }
 
 /**
