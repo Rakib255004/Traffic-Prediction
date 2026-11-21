@@ -624,7 +624,9 @@ export default function TrafficInsights() {
             ) : (
               <span className="inline-flex items-center gap-1.5 text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-1 rounded-full font-medium">
                 <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-                Live Node.js Telemetry (Port 5000)
+                {typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+                  ? 'Live Node.js Telemetry (Port 5000)'
+                  : 'Live Node.js Telemetry (Render Cloud)'}
               </span>
             )}
           </div>

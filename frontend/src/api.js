@@ -8,10 +8,10 @@ import { NODE_COORDINATES, OFFICIAL_ROUTES, ALL_ROUTES, DHAKA_BYPASS_WAYPOINTS }
 // On localhost, Express also serves /api directly on port 5000 (and Vite proxies /api in dev).
 export const API_BASE = (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'))
   ? '/api'
-  : (import.meta.env.VITE_API_URL || '/api');
+  : (import.meta.env.VITE_API_URL || 'https://traffic-prediction-q1yl.onrender.com/api');
 
-// Maximum time to wait for backend before falling back to local dataset (prevents infinite spinner during Render cold-start)
-export const FETCH_TIMEOUT_MS = 6000;
+// Maximum time to wait for backend before falling back to local dataset (allows Render cloud cold-start)
+export const FETCH_TIMEOUT_MS = 15000;
 
 export async function fetchWithTimeout(url, options = {}, timeoutMs = FETCH_TIMEOUT_MS) {
   const controller = new AbortController();
