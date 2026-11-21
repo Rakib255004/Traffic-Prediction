@@ -4,11 +4,11 @@ import { NODE_COORDINATES, OFFICIAL_ROUTES, ALL_ROUTES, DHAKA_BYPASS_WAYPOINTS }
 // API Service for Dhaka Traffic Prediction System
 // High-resilience client with automatic live backend detection and offline fallback
 
-// In production, calls go directly to the Render backend.
-// In development, Vite proxies /api to localhost:5000.
-export const API_BASE = import.meta.env.PROD
-  ? 'https://traffic-prediction-q1yl.onrender.com/api'
-  : '/api';
+// In production, when running on Render or custom domain, Express serves /api directly.
+// On localhost, Express also serves /api directly on port 5000 (and Vite proxies /api in dev).
+export const API_BASE = (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'))
+  ? '/api'
+  : (import.meta.env.VITE_API_URL || '/api');
 
 // Maximum time to wait for backend before falling back to local dataset (prevents infinite spinner during Render cold-start)
 export const FETCH_TIMEOUT_MS = 6000;
@@ -468,4 +468,51 @@ function calcHaversineKm(c1, c2) {
             Math.cos(c1[0] * Math.PI / 180) * Math.cos(c2[0] * Math.PI / 180) *
             Math.sin(dLon / 2) ** 2;
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+export async function fetchRlStatus() {
+  try {
+    const res = await fetchWithTimeout(`${API_BASE}/rl/status`);
+    if (res.ok) {
+      const json = await res.json();
+      if (json && json.success) return json.data;
+    }
+  } catch (err) {
+    console.warn('[API] /api/rl/status fetch error:', err.message);
+  }
+  return null;
+}
+
+export async function evaluateRlNow(currentPrediction = null, limit = 5) {
+  try {
+    const res = await fetchWithTimeout(`${API_BASE}/rl/evaluate-now`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ currentPrediction, limit })
+    });
+    if (res.ok) {
+      const json = await res.json();
+      if (json && json.success) return json.data;
+    }
+  } catch (err) {
+    console.warn('[API] /api/rl/evaluate-now error:', err.message);
+  }
+  return null;
+}
+
+export async function run10HourSimulationApi(params = {}) {
+  try {
+    const res = await fetchWithTimeout(`${API_BASE}/rl/simulate-10h`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(params)
+    });
+    if (res.ok) {
+      const json = await res.json();
+      if (json && json.success) return json.data;
+    }
+  } catch (err) {
+    console.warn('[API] /api/rl/simulate-10h error:', err.message);
+  }
+  return null;
 }

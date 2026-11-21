@@ -398,7 +398,9 @@ export function decodeEncodedPolyline(encoded) {
 }
 
 /**
- * Find real Dhaka intersection checkpoints from NODE_COORDINATES lying along a routed polyline
+ * Find real Dhaka intersection checkpoints from NODE_COORDINATES lying along a routed polyline.
+ * Guarantees every returned checkpoint is strictly within 350m of the polyline and snapped
+ * directly to the exact vertex on the route line (zero detachment).
  */
 export function findRouteCheckpoints(routeCoords, fromName, toName, explicitSteps = []) {
   if (!Array.isArray(routeCoords) || routeCoords.length < 2) return [];
@@ -416,9 +418,8 @@ export function findRouteCheckpoints(routeCoords, fromName, toName, explicitStep
   const closestIdx = (c) => {
     let minDist = Infinity;
     let bestIdx = -1;
-    const stride = routeCoords.length > 150 ? 2 : 1;
-    for (let i = 0; i < routeCoords.length; i += stride) {
-      const d = approxKm(routeCoords[i], c);
+    for (let i = 0; i < routeCoords.length; i++) {
+      const d = haversineKm(routeCoords[i], c);
       if (d < minDist) {
         minDist = d;
         bestIdx = i;
@@ -427,44 +428,47 @@ export function findRouteCheckpoints(routeCoords, fromName, toName, explicitStep
     return { minDist, bestIdx };
   };
 
-  // 1. Always include explicit intermediate corridor steps first (if well away from endpoints)
+  // 1. Include explicit intermediate corridor steps ONLY if they strictly lie on the route polyline (<= 350m)
   if (Array.isArray(explicitSteps) && explicitSteps.length > 2) {
     for (const stepName of explicitSteps.slice(1, -1)) {
       const c = NODE_COORDINATES[stepName];
       if (!c) continue;
-      if (haversineKm(origCoord, c) < 1.1 || haversineKm(destCoord, c) < 1.1) continue;
-      const pk = `${c[0].toFixed(3)},${c[1].toFixed(3)}`;
+      if (haversineKm(origCoord, c) < 1.0 || haversineKm(destCoord, c) < 1.0) continue;
+      const { minDist, bestIdx } = closestIdx(c);
+      // Strictly require checkpoint to be within 350 meters of the routed road polyline
+      if (minDist > 0.35 || bestIdx <= 0 || bestIdx >= routeCoords.length - 1) continue;
+      const snapped = routeCoords[bestIdx];
+      const pk = `${snapped[0].toFixed(3)},${snapped[1].toFixed(3)}`;
       if (seenPos.has(pk)) continue;
       seenPos.add(pk);
-      const { bestIdx } = closestIdx(c);
-      candidates.push({ name: stepName, coords: c, minRouteIdx: Math.max(1, bestIdx), priority: 1 });
+      candidates.push({ name: stepName, coords: snapped, minRouteIdx: bestIdx, priority: 1 });
     }
   }
 
-  // 2. Discover nearby strategic nodes along the OSM path
+  // 2. Discover nearby strategic nodes along the OSM path (strictly within 350m of route line)
   for (const [name, c] of Object.entries(NODE_COORDINATES)) {
     if (name === fromName || name === toName) continue;
-    const pk = `${c[0].toFixed(3)},${c[1].toFixed(3)}`;
-    if (seenPos.has(pk)) continue;
-
     // Must not overlap origin or destination labels
-    if (haversineKm(origCoord, c) < 1.3 || haversineKm(destCoord, c) < 1.3) continue;
+    if (haversineKm(origCoord, c) < 1.0 || haversineKm(destCoord, c) < 1.0) continue;
 
     const { minDist, bestIdx } = closestIdx(c);
 
-    if (minDist <= 0.4 && bestIdx > 0 && bestIdx < routeCoords.length - 1) {
+    if (minDist <= 0.35 && bestIdx > 0 && bestIdx < routeCoords.length - 1) {
+      const snapped = routeCoords[bestIdx];
+      const pk = `${snapped[0].toFixed(3)},${snapped[1].toFixed(3)}`;
+      if (seenPos.has(pk)) continue;
       seenPos.add(pk);
-      candidates.push({ name, coords: c, minRouteIdx: bestIdx, priority: 2 });
+      candidates.push({ name, coords: snapped, minRouteIdx: bestIdx, priority: 2 });
     }
   }
 
   // Order checkpoints along the route from origin to destination
   candidates.sort((a, b) => a.minRouteIdx - b.minRouteIdx);
 
-  // Enforce >= 1.8 km spacing and cap at 4 pills so labels stay airy and readable
+  // Enforce >= 1.5 km spacing along road and cap at 4 pills so labels stay airy and readable
   const spaced = [];
   for (const cand of candidates) {
-    const tooClose = spaced.some(s => approxKm(s.coords, cand.coords) < 1.8);
+    const tooClose = spaced.some(s => haversineKm(s.coords, cand.coords) < 1.5);
     if (!tooClose) spaced.push({ name: cand.name, coords: cand.coords });
     if (spaced.length >= 4) break;
   }

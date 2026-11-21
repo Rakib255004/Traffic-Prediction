@@ -174,4 +174,4 @@ Developed as an intelligent transportation system and predictive analytics proje
 ---
 
 ## 📄 License
-This project is developed for educational and academic research purposes under the MIT License.
+Copyright (c) 2026 Zannatul Farzana Maria, K. M. Fathum Mubin and Rakib Rohan. All rights reserved. Developed for academic and educational evaluation. See [LICENSE](LICENSE) for terms.

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { ALL_DHAKA_LOCATIONS } from '../utils/journeyPredictor.js';
 import { predictJourneyApi } from '../api.js';
 import JourneyRouteMap from './JourneyRouteMap.jsx';
@@ -327,11 +327,18 @@ export default function TrafficJourneyPredictor() {
   };
 
   const cfg = result ? (LEVEL_CONFIG[result.traffic_prediction] || LEVEL_CONFIG.Low) : null;
-  const altList = result?.alternative_routes?.length
-    ? result.alternative_routes
-    : result?.alternative_route
-      ? [result.alternative_route]
-      : [];
+  const altList = useMemo(() => {
+    return result?.alternative_routes?.length
+      ? result.alternative_routes
+      : result?.alternative_route
+        ? [result.alternative_route]
+        : [];
+  }, [result?.alternative_routes, result?.alternative_route]);
+
+  const handleSelectAlternative = useCallback((idx) => {
+    setSelectedAltIndex(idx);
+  }, []);
+
   const activeAltCardIdx = typeof selectedAltIndex === 'number' ? selectedAltIndex : 0;
   const activeAlt = altList[activeAltCardIdx] || result?.alternative_route || null;
   const ALT_ROUTE_COLORS = ['#7c3aed', '#0d9488', '#ea580c']; // Purple, Teal, Orange
@@ -725,7 +732,7 @@ export default function TrafficJourneyPredictor() {
               alternativeRoute={result.alternative_route}
               showAlternative={altList.length > 0}
               selectedAltIndex={selectedAltIndex}
-              onSelectAlternative={(idx) => setSelectedAltIndex(idx)}
+              onSelectAlternative={handleSelectAlternative}
               trafficPrediction={result.traffic_prediction}
               selectedDate={selectedDate}
               selectedTime={selectedTime}
