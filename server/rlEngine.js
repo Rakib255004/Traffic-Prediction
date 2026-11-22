@@ -118,27 +118,41 @@ export async function recordPredictionForEvaluation({
 
   try {
     const normKey = normalizeCorridorKey(from, to, corridorKey);
-    const hourBucket = Math.max(0, Math.min(23, Math.floor(hour || 12)));
+    const hourBucket = Math.max(0, Math.min(23, Math.floor(hour != null ? hour : 12)));
     const isWeekend = ['friday', 'saturday'].includes((day || '').toLowerCase());
     const dayType = isWeekend ? 'weekend' : 'weekday';
 
-    // Compute the exact real-world datetime when this prediction should be verified.
-    // If the user is predicting a FUTURE date+time (e.g. 22 Nov 12:30 PM), we set
-    // eval_due_time to that exact moment so the background worker waits until then.
-    let evalDueTime;
-    if (date && time) {
-      const predictedWallClock = new Date(`${date}T${time}:00`);
-      const nowMs = Date.now();
-      if (!isNaN(predictedWallClock.getTime()) && predictedWallClock.getTime() > nowMs) {
-        // Future prediction: evaluate exactly at the predicted travel time
-        evalDueTime = predictedWallClock.toISOString();
-      } else {
-        // Past or now: evaluate after a short delay (let OSRM stabilise)
-        evalDueTime = new Date(nowMs + evalDelayMinutes * 60 * 1000).toISOString();
-      }
-    } else {
-      evalDueTime = new Date(Date.now() + evalDelayMinutes * 60 * 1000).toISOString();
+    // Format target time cleanly (HH:mm)
+    const timeParts = (time || `${String(hourBucket).padStart(2, '0')}:00`).trim().split(':');
+    const hh = String(parseInt(timeParts[0] || hourBucket, 10)).padStart(2, '0');
+    const mm = String(parseInt(timeParts[1] || '0', 10)).padStart(2, '0');
+    const cleanTimeStr = `${hh}:${mm}`;
+
+    // Resolve date string (YYYY-MM-DD in Dhaka time)
+    const nowMs = Date.now();
+    const todayDhakaStr = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Dhaka' });
+    const inputDate = date && /^\d{4}-\d{2}-\d{2}$/.test(date.trim()) ? date.trim() : todayDhakaStr;
+
+    // Dhaka is UTC+6 (+06:00)
+    let targetWallClock = new Date(`${inputDate}T${cleanTimeStr}:00+06:00`);
+
+    // If the chosen time has already passed today, advance verification to the EXACT SAME TIME
+    // on the next future occurrence (tomorrow) so it strictly compares apples-to-apples in the future!
+    if (isNaN(targetWallClock.getTime())) {
+      targetWallClock = new Date(nowMs + 24 * 60 * 60 * 1000);
+    } else if (targetWallClock.getTime() <= nowMs) {
+      const daysToAdd = Math.ceil((nowMs - targetWallClock.getTime()) / (24 * 60 * 60 * 1000)) || 1;
+      targetWallClock = new Date(targetWallClock.getTime() + daysToAdd * 24 * 60 * 60 * 1000);
     }
+
+    const evalDueTime = targetWallClock.toISOString();
+    const targetDateLabel = targetWallClock.toLocaleDateString('en-US', {
+      timeZone: 'Asia/Dhaka',
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric'
+    });
+    const targetTimeLabel = `${targetDateLabel} at ${cleanTimeStr} (${dayType})`;
 
     const { data, error } = await supabase
       .from('rl_prediction_evaluations')
@@ -156,13 +170,15 @@ export async function recordPredictionForEvaluation({
         predicted_level: predictedLevel,
         status: 'PENDING',
         eval_due_time: evalDueTime,
+        target_datetime: evalDueTime,
+        target_time_str: targetTimeLabel,
       })
       .select('id')
       .single();
 
     if (error) throw error;
 
-    console.log(`[RL-Engine] Auto-saved prediction #${data.id} (${from} → ${to}, ${predictedTimeMin}m) for ground-truth verification at ${evalDueTime}`);
+    console.log(`[RL-Engine] Auto-saved prediction #${data.id} (${from} → ${to}, ${predictedTimeMin}m) scheduled for exact verification at ${targetTimeLabel} (${evalDueTime})`);
     return data.id;
   } catch (err) {
     console.warn('[RL-Engine] Failed to auto-save prediction for RL evaluation:', err.message);
@@ -386,19 +402,25 @@ export async function evaluatePendingPredictions({ currentPrediction = null, lim
           const osrmData = await fetchOsrmRoute(origCoords, destCoords);
           if (osrmData) {
             const osrmFreeFlowMin = osrmData.durationMin;
-            // Apply Dhaka-calibrated congestion factor based on current hour
-            const hourNow = new Date().getHours();
+            // Ground truth evaluation anchored strictly to the prediction's target hour and day type
+            const targetHour = item.hour_bucket != null ? item.hour_bucket : 12;
+            const isWknd = (item.day_type || '').toLowerCase() === 'weekend';
             let congestionFactor;
-            if (hourNow >= 8 && hourNow <= 10) congestionFactor = 2.1;
-            else if (hourNow >= 16 && hourNow <= 19) congestionFactor = 2.3;
-            else if (hourNow >= 11 && hourNow <= 15) congestionFactor = 1.6;
-            else if (hourNow === 7) congestionFactor = 1.5;
-            else congestionFactor = 1.2 + Math.random() * 0.3;
+            if (!isWknd) {
+              if (targetHour >= 8 && targetHour <= 10.5) congestionFactor = 2.25;
+              else if (targetHour >= 16.5 && targetHour <= 20.5) congestionFactor = 2.45;
+              else if (targetHour >= 11 && targetHour <= 16.5) congestionFactor = 1.60;
+              else if (targetHour >= 6.5 && targetHour < 8) congestionFactor = 1.45;
+              else congestionFactor = 1.10 + Math.random() * 0.15;
+            } else {
+              if (targetHour >= 16 && targetHour <= 21) congestionFactor = 1.70;
+              else congestionFactor = 1.10 + Math.random() * 0.15;
+            }
             actualTimeMin = Number((osrmFreeFlowMin * congestionFactor).toFixed(1));
             actualSpeedKmh = Number((osrmData.distanceKm / Math.max(actualTimeMin / 60.0, 0.01)).toFixed(1));
             const ratio = actualTimeMin / Math.max(osrmFreeFlowMin, 1.0);
             actualLevel = ratio >= 1.8 || actualSpeedKmh < 15.0 ? 'High' : (ratio >= 1.4 || actualSpeedKmh < 24.0 ? 'Medium' : 'Low');
-            console.log(`[RL-Engine] OSRM: ${item.from_location}→${item.to_location} free-flow=${osrmFreeFlowMin.toFixed(1)}m ×${congestionFactor.toFixed(2)}=${actualTimeMin}m (${actualLevel})`);
+            console.log(`[RL-Engine] OSRM: ${item.from_location}→${item.to_location} targetHour=${targetHour}:00 (${item.day_type}) free-flow=${osrmFreeFlowMin.toFixed(1)}m ×${congestionFactor.toFixed(2)}=${actualTimeMin}m (${actualLevel})`);
           } else {
             // Last-resort: historical jitter fallback
             actualTimeMin = Number((parseFloat(item.predicted_time_min) * (0.94 + Math.random() * 0.12)).toFixed(1));
@@ -806,6 +828,11 @@ export async function getRlStatus() {
         status: e.status,
         timestamp: e.created_at,
         eval_due_time: e.eval_due_time,
+        target_datetime: e.target_datetime || e.eval_due_time,
+        target_time_str: e.target_time_str || (e.hour_bucket != null ? `${String(e.hour_bucket).padStart(2, '0')}:00 (${e.day_type || 'weekday'})` : null),
+        hour_bucket: e.hour_bucket,
+        day_type: e.day_type,
+        evaluated_at: e.evaluated_at,
       })),
       learned_corridors: (policies || []).map(p => ({
         corridor: p.corridor_key,

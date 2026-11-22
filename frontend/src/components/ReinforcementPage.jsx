@@ -578,12 +578,13 @@ export default function ReinforcementPage() {
               <tr>
                 <th className="py-3 px-4">ID</th>
                 <th className="py-3 px-4">Route</th>
-                <th className="py-3 px-4">Predicted Time</th>
-                <th className="py-3 px-4">Actual (OSRM)</th>
+                <th className="py-3 px-4">Target Journey Time</th>
+                <th className="py-3 px-4">Predicted Duration</th>
+                <th className="py-3 px-4">Actual (OSRM / Live)</th>
                 <th className="py-3 px-4">Error</th>
                 <th className="py-3 px-4">Status</th>
                 <th className="py-3 px-4">Reward Signal</th>
-                <th className="py-3 px-4">Time Scheduled / Evaluated</th>
+                <th className="py-3 px-4">Verification Timing</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-slate-700">
@@ -591,7 +592,14 @@ export default function ReinforcementPage() {
                 <tr key={e.id} className="hover:bg-slate-50/80 transition-colors">
                   <td className="py-3 px-4 font-mono text-slate-400">#{e.id}</td>
                   <td className="py-3 px-4 font-semibold text-slate-900">{e.route}</td>
-                  <td className="py-3 px-4 font-mono">{e.predicted_time_min ? `${e.predicted_time_min}m` : '—'}</td>
+                  <td className="py-3 px-4 font-mono">
+                    <span className="font-semibold text-indigo-700 bg-indigo-50 border border-indigo-200/60 px-2 py-0.5 rounded text-[11px] whitespace-nowrap inline-block">
+                      {e.target_time_str || (e.hour_bucket != null ? `${String(e.hour_bucket).padStart(2, '0')}:00 (${e.day_type || 'weekday'})` : '—')}
+                    </span>
+                  </td>
+                  <td className="py-3 px-4 font-mono font-bold text-slate-800">
+                    {e.predicted_time_min ? `${e.predicted_time_min}m` : '—'}
+                  </td>
                   <td className="py-3 px-4 font-mono">
                     {e.actual_time_min != null ? (
                       <span className="font-semibold text-slate-900">{e.actual_time_min}m</span>
@@ -599,7 +607,7 @@ export default function ReinforcementPage() {
                       <span className="text-amber-600 italic">Scheduled...</span>
                     )}
                   </td>
-                  <td className="py-3 px-4 font-mono">
+                  <td className="py-3 px-4 font-mono font-medium">
                     {e.error_pct != null ? `${e.error_pct}%` : '—'}
                   </td>
                   <td className="py-3 px-4">
@@ -622,14 +630,22 @@ export default function ReinforcementPage() {
                       <span className="text-slate-400">—</span>
                     )}
                   </td>
-                  <td className="py-3 px-4 text-slate-400 text-[11px] font-mono">
-                    {e.eval_due_time ? new Date(e.eval_due_time).toLocaleString() : (e.timestamp ? new Date(e.timestamp).toLocaleString() : '—')}
+                  <td className="py-3 px-4 text-slate-500 text-[11px] font-mono whitespace-nowrap">
+                    {e.status === 'PENDING' ? (
+                      <span className="text-amber-600 font-medium">
+                        Due: {e.eval_due_time ? new Date(e.eval_due_time).toLocaleString() : '—'}
+                      </span>
+                    ) : (
+                      <span>
+                        Verified: {e.evaluated_at ? new Date(e.evaluated_at).toLocaleString() : (e.eval_due_time ? new Date(e.eval_due_time).toLocaleString() : '—')}
+                      </span>
+                    )}
                   </td>
                 </tr>
               ))}
               {filteredEpisodes.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="py-8 text-center text-slate-400">
+                  <td colSpan={9} className="py-8 text-center text-slate-400">
                     No episodes found under filter: {episodeFilter}.
                   </td>
                 </tr>
