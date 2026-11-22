@@ -234,7 +234,7 @@ function RouteRecordsList({ routes }) {
 
               {/* Breakdown % */}
               <span
-                className={`text-[10px] font-semibold px-2 py-0.5 rounded w-28 text-center shrink-0 ${
+                className={`text-[11px] font-semibold px-2.5 py-0.5 rounded whitespace-nowrap min-w-[85px] text-center shrink-0 ${
                   sPct >= 20
                     ? 'bg-rose-50 text-rose-600 border border-rose-100'
                     : hPct >= 25
@@ -245,7 +245,7 @@ function RouteRecordsList({ routes }) {
                 }`}
                 title={`Normal: ${nPct}% · Moderate: ${mPct}% · Heavy: ${hPct}% · Severe: ${sPct}%`}
               >
-                {r.value > 0 ? `${nPct}% N · ${mPct}% M · ${sPct}% S` : '0%'}
+                {r.value > 0 ? `${nPct}% N · ${sPct}% S` : '0%'}
               </span>
             </div>
           );
