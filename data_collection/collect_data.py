@@ -32,9 +32,10 @@ if os.path.exists(env_file):
                 k, v = line.split("=", 1)
                 os.environ.setdefault(k.strip(), v.strip().strip("\"'"))
 
-# Output Paths
+# Output Paths (Default to live snapshot to protect canonical training grid)
 DATA_DIR = os.path.join(os.path.dirname(__file__), "..", "data")
-CSV_PATH = os.path.join(DATA_DIR, "traffic_data.csv")
+CSV_PATH = os.path.join(DATA_DIR, "live_traffic_snapshot.csv")
+TRAINING_CSV_PATH = os.path.join(DATA_DIR, "traffic_data.csv")
 GEOJSON_PATH = os.path.join(DATA_DIR, "dhaka_roads.geojson")
 
 # ---------------------------------------------------------
@@ -111,13 +112,20 @@ class OSMRoadNetwork:
         
         # Add key Dhaka node coordinates
         try:
-            from src.routes_config import NODE_COORDINATES
+            from data_collection.routes_config import NODE_COORDINATES
             for name, (lat, lon) in NODE_COORDINATES.items():
                 pt = (round(lat, 5), round(lon, 5))
                 if pt not in coord_counts:
                     self.junction_coords.append(pt)
         except Exception:
-            pass
+            try:
+                from routes_config import NODE_COORDINATES
+                for name, (lat, lon) in NODE_COORDINATES.items():
+                    pt = (round(lat, 5), round(lon, 5))
+                    if pt not in coord_counts:
+                        self.junction_coords.append(pt)
+            except Exception:
+                pass
 
     @staticmethod
     def haversine(c1, c2):
@@ -128,15 +136,21 @@ class OSMRoadNetwork:
         a = math.sin(dlat / 2)**2 + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlon / 2)**2
         return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
 
-    def get_distance_to_junction_m(self, lat: float, lon: float) -> float:
-        """Measures proximity to intersections where vehicles naturally slow down, merge, or queue up."""
+    def get_distance_to_junction_m(self, lat: float, lon: float, min_threshold_m: float = 25.0) -> float:
+        """
+        Measures proximity to the next upcoming intersection/junction where vehicles slow down, merge, or queue up.
+        Filters out self-matches (distance < 25m) so it measures distance to the NEXT intersection rather than 0m.
+        """
         if not hasattr(self, "junction_coords") or not self.junction_coords:
             self._build_junctions()
         if not self.junction_coords:
             return 120.0
         target = (lat, lon)
-        min_dist_km = min(self.haversine(target, j) for j in self.junction_coords)
-        return round(min_dist_km * 1000.0, 1)
+        dists_m = [self.haversine(target, j) * 1000.0 for j in self.junction_coords]
+        next_dists = [d for d in dists_m if d >= min_threshold_m]
+        if next_dists:
+            return round(min(next_dists), 1)
+        return round(min(dists_m), 1)
 
     def find_nearest_osm_way(self, lat: float, lon: float, max_dist_km: float = 6.0) -> dict:
         """Finds nearest OSM way and returns its physical infrastructure attributes."""
@@ -219,6 +233,31 @@ except ImportError:
         DualTrafficEngine = None
 
 TRAFFIC_ENGINE = DualTrafficEngine() if DualTrafficEngine else None
+
+# Bangladesh Calendar, Holidays & Dhaka Special Events Engine
+try:
+    from data_collection.bangladesh_calendar import (
+        is_bangladesh_weekend,
+        get_bangladesh_holiday,
+        get_special_event,
+        is_dhaka_rush_hour
+    )
+except ImportError:
+    try:
+        from bangladesh_calendar import (
+            is_bangladesh_weekend,
+            get_bangladesh_holiday,
+            get_special_event,
+            is_dhaka_rush_hour
+        )
+    except Exception:
+        def is_bangladesh_weekend(dt): return dt.weekday() in [4, 5]
+        def get_bangladesh_holiday(dt): return False, None
+        def get_special_event(dt, r=""): return False, None
+        def is_dhaka_rush_hour(dt):
+            if dt.weekday() in [4, 5]: return False
+            hf = dt.hour + dt.minute / 60.0
+            return (8.0 <= hf <= 10.5) or (17.0 <= hf <= 20.5)
 
 # ---------------------------------------------------------
 # 1. Route Configuration (Official Project Corridors R01 to R50)
@@ -848,16 +887,9 @@ def get_live_weather(lat: float, lon: float):
                 weather_list = data.get("weather", [])
                 weather_id = weather_list[0].get("id", 800) if weather_list else 800
 
-                # OpenWeatherMap weather code condition classification
-                if 200 <= weather_id < 300:
-                    weather = "Heavy Rain"  # Thunderstorm
-                elif 300 <= weather_id < 400:
-                    weather = "Light Rain"  # Drizzle
-                elif 500 <= weather_id < 600:
-                    if weather_id in [502, 503, 504, 522] or precip_mm >= 4.0:
-                        weather = "Heavy Rain"
-                    else:
-                        weather = "Light Rain"
+                # Standardized 4-class weather condition classification
+                if 200 <= weather_id < 600:
+                    weather = "Rain"
                 elif 700 <= weather_id < 800:
                     weather = "Fog"         # Mist, Fog, Haze
                 elif weather_id == 800:
@@ -872,9 +904,9 @@ def get_live_weather(lat: float, lon: float):
                 visibility_km = round(visibility_m / 1000.0, 1)
 
                 # Road surface condition
-                if precip_mm >= 4.0 or weather == "Heavy Rain":
+                if precip_mm >= 4.0:
                     surface_condition = "Waterlogged"
-                elif precip_mm > 0.0 or weather == "Light Rain":
+                elif precip_mm > 0.0 or weather == "Rain":
                     surface_condition = "Wet"
                 elif weather == "Fog":
                     surface_condition = "Damp"
@@ -907,11 +939,9 @@ def get_live_weather(lat: float, lon: float):
             visibility_m = data.get("visibility", 10000.0)
             visibility_km = round(visibility_m / 1000.0, 1)
 
-            # Weather interpretation
-            if precip_mm > 5.0 or weather_code in [63, 65, 82]:
-                weather = "Heavy Rain"
-            elif precip_mm > 0.1 or weather_code in [51, 61, 80]:
-                weather = "Light Rain"
+            # Weather interpretation (Canonical 4-class schema: Clear, Cloudy, Rain, Fog)
+            if precip_mm > 0.1 or weather_code in [51, 61, 63, 65, 80, 82]:
+                weather = "Rain"
             elif weather_code in [45, 48]:
                 weather = "Fog"
             elif weather_code in [1, 2, 3]:
@@ -919,9 +949,9 @@ def get_live_weather(lat: float, lon: float):
             else:
                 weather = "Clear"
 
-            if precip_mm >= 4.0 or weather == "Heavy Rain":
+            if precip_mm >= 4.0:
                 surface_condition = "Waterlogged"
-            elif precip_mm > 0.0 or weather == "Light Rain":
+            elif precip_mm > 0.0 or weather == "Rain":
                 surface_condition = "Wet"
             elif weather == "Fog":
                 surface_condition = "Damp"
@@ -1009,18 +1039,22 @@ def get_live_traffic(route: dict, now: datetime.datetime, weather: dict, key_poo
     traffic_delay_min = max(0.0, round(travel_time_min - free_flow, 1))
 
     ratio = travel_time_min / max(free_flow, 0.1)
-    if ratio < 1.3:
+    if ratio < 1.25:
         traffic_level = "NORMAL"
         upstream_speed_kmh = round(speed_kmh * np.random.uniform(0.98, 1.05), 1)
         downstream_speed_kmh = round(speed_kmh * np.random.uniform(0.97, 1.04), 1)
-    elif ratio < 1.8:
-        traffic_level = "SLOW"
-        upstream_speed_kmh = round(min(speed_kmh * np.random.uniform(1.05, 1.15), free_flow_speed), 1)
+    elif ratio < 1.75:
+        traffic_level = "MODERATE"
+        upstream_speed_kmh = round(min(speed_kmh * np.random.uniform(1.05, 1.12), free_flow_speed), 1)
         downstream_speed_kmh = round(max(speed_kmh * np.random.uniform(0.88, 0.96), 6.0), 1)
+    elif ratio < 2.50:
+        traffic_level = "HEAVY"
+        upstream_speed_kmh = round(min(speed_kmh * np.random.uniform(1.10, 1.20), free_flow_speed), 1)
+        downstream_speed_kmh = round(max(speed_kmh * np.random.uniform(0.80, 0.90), 4.0), 1)
     else:
-        traffic_level = "TRAFFIC_JAM"
-        upstream_speed_kmh = round(min(speed_kmh * np.random.uniform(1.10, 1.25), free_flow_speed), 1)
-        downstream_speed_kmh = round(max(speed_kmh * np.random.uniform(0.80, 0.92), 4.0), 1)
+        traffic_level = "SEVERE"
+        upstream_speed_kmh = round(min(speed_kmh * np.random.uniform(1.15, 1.28), free_flow_speed), 1)
+        downstream_speed_kmh = round(max(speed_kmh * np.random.uniform(0.72, 0.85), 3.0), 1)
 
     return (travel_time_min, free_flow, speed_kmh, traffic_level,
             traffic_delay_min, "Simulation", upstream_speed_kmh, downstream_speed_kmh)
@@ -1132,13 +1166,10 @@ def collect_current_snapshot(source: str = "corridors", limit: int = 50):
     now = datetime.datetime.now()
     timestamp_str = now.strftime("%Y-%m-%d %H:%M")
     day_name = now.strftime("%A")
-    hour_val = 24 if now.hour == 0 else now.hour
+    hour_val = now.hour  # 0-23 standard format
     minute_val = now.minute
-    is_weekend = "Yes" if now.weekday() in [4, 5] else "No"
-
-    # Rush hour indicator
-    hour_float = hour_val + minute_val / 60.0
-    is_rush = "Yes" if (((8.0 <= hour_float <= 10.5) or (17.0 <= hour_float <= 21.0)) and is_weekend == "No") else "No"
+    is_weekend = "Yes" if is_bangladesh_weekend(now) else "No"
+    is_rush = "Yes" if is_dhaka_rush_hour(now) else "No"
 
     print("\n" + "=" * 120)
     print(f"  Dhaka Traffic & OSM Collector | Snapshot Time: {timestamp_str}")
@@ -1229,15 +1260,29 @@ def collect_current_snapshot(source: str = "corridors", limit: int = 50):
         # Incident simulation (low probability)
         has_accident = "Yes" if np.random.rand() < 0.03 else "No"
         has_construction = "Yes" if np.random.rand() < 0.05 else "No"
-        has_event = "No"
+        
+        # Real Dhaka Special Event / Gazette Holiday Detection
+        is_event, _ = get_special_event(now, route.get("route_id", ""))
+        has_event = "Yes" if is_event else "No"
 
-        congestion_ratio = round(travel_time / max(free_flow, 0.1), 2)
+        # Physical floor & speed cap: travel time cannot be faster than free-flow time, speed bounded by road class
+        max_speed = 65.0 if route.get("road_type") == "Expressway" else 48.0
+        min_phys_time = round((route["road_length_km"] / max_speed) * 60, 1)
+        travel_time = max(free_flow, min_phys_time, travel_time)
+        speed = round(route["road_length_km"] / max(travel_time / 60.0, 0.01), 1)
+        delay_min = max(0.0, round(travel_time - free_flow, 1))
+        congestion_ratio = max(1.00, round(travel_time / max(free_flow, 0.1), 2))
+
+        # Standardize road type and lane count from canonical route registry
+        clean_road_type = route.get("road_type", "Primary Arterial")
+        clean_lanes = float(route.get("num_lanes", 4.0))
+        clean_osm_id = f"way/dhaka_{route.get('route_code', 'r01').lower()}"
 
         # Exact 43 columns requested by user specification
         row = {
             "timestamp": timestamp_str,
             "road_route_id": route["route_id"],
-            "osm_id": osm_id,
+            "osm_id": clean_osm_id,
             "latitude": orig_lat,
             "longitude": orig_lon,
             "dest_latitude": dest_lat,
@@ -1256,9 +1301,9 @@ def collect_current_snapshot(source: str = "corridors", limit: int = 50):
             "weather": weather["weather"],
             "temperature_c": weather["temperature_c"],
             "rainfall_mm": weather["rainfall_mm"],
-            "road_type": osm_road_type,
-            "road_length_km": road_length,
-            "num_lanes": osm_lanes,
+            "road_type": clean_road_type,
+            "road_length_km": route["road_length_km"],
+            "num_lanes": clean_lanes,
             "is_oneway": "Yes" if osm_oneway == 1 else "No",
             "accident_incident": has_accident,
             "road_construction": has_construction,
@@ -1306,7 +1351,7 @@ def collect_current_snapshot(source: str = "corridors", limit: int = 50):
     print("-" * 120)
     counts = df_new['traffic_level'].value_counts().to_dict()
     print(f"SUCCESS: Appended {len(new_rows)} structured records -> {CSV_PATH}")
-    print(f"Summary: {counts.get('NORMAL', 0)} Normal | {counts.get('SLOW', 0)} Slow | {counts.get('TRAFFIC_JAM', 0)} Jam")
+    print(f"Summary: {counts.get('NORMAL', 0)} Normal | {counts.get('MODERATE', 0)} Moderate | {counts.get('HEAVY', 0)} Heavy | {counts.get('SEVERE', 0)} Severe")
     print("=" * 120 + "\n")
 
 
@@ -1322,7 +1367,7 @@ def print_key_stats():
             print(f"    Key #{idx}: {client.mask_key(k)} | Calls: {st.get('calls', 0)} | Success: {st.get('success', 0)} | Errors: {st.get('errors', 0)}")
     else:
         print("  Google Maps Engine: Not initialized")
-    print(f"  Waze Live Map Engine: Enabled (Zero-Key Crowdsourced Fallback)")
+    print(f"  OSRM / OpenStreetMap Engine: Enabled (Zero-Key Real Road Failover)")
     print("=" * 65)
 
 

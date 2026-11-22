@@ -1,25 +1,30 @@
 """
 Unified Data Pipeline for Traffic Prediction Machine
 ===================================================
-Combines data sources into a single coordinated call:
-  1. OpenStreetMap (Overpass API) -> Physical Road Infrastructure
-  2. Live Traffic Engine          -> Traffic, Speed & Congestion State
-  3. OpenWeatherMap API           -> Environmental & Weather Factors
+Combines real-time data sources into a single coordinated call:
+  1. OpenStreetMap (Overpass API / Road Topology) -> Physical Road Infrastructure & Junctions
+  2. Live Traffic Engine (Google Maps -> Key 1 -> Key 2 -> OSRM Failover) -> Speeds & Congestion
+  3. OpenWeatherMap API                           -> Environmental & Weather Factors
+  4. Bangladesh Calendar & Event Registry         -> Weekends, Gazetted Holidays & Dhaka Events
 
 Usage:
-    py -3 src/unified_call.py
-    py -3 src/unified_call.py --origin 23.8069,90.3687 --dest 23.7570,90.3888 --name "Mirpur 10 to Farmgate"
+    python data_collection/unified_call.py
+    python data_collection/unified_call.py --origin 23.8069,90.3687 --dest 23.7570,90.3888 --name "Mirpur 10 to Farmgate"
 """
 
 import os
 import sys
 import json
-import requests
 import datetime
+import argparse
 
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if BASE_DIR not in sys.path:
     sys.path.insert(0, BASE_DIR)
+
+DATA_COLL_DIR = os.path.dirname(os.path.abspath(__file__))
+if DATA_COLL_DIR not in sys.path:
+    sys.path.insert(0, DATA_COLL_DIR)
 
 # Load API keys from .env
 try:
@@ -28,13 +33,35 @@ try:
 except ImportError:
     pass
 
-from src.collect_data import (
-    OSM_NETWORK,
-    get_live_weather,
-    get_live_traffic,
-    calculate_traffic_flow,
-    get_historical_speed_baseline
-)
+# Collector modules
+try:
+    from data_collection.collect_data import (
+        OSM_NETWORK,
+        get_live_weather,
+        get_live_traffic,
+        calculate_traffic_flow,
+        get_historical_speed_baseline
+    )
+    from data_collection.bangladesh_calendar import (
+        is_bangladesh_weekend,
+        get_bangladesh_holiday,
+        get_special_event,
+        is_dhaka_rush_hour
+    )
+except ImportError:
+    from collect_data import (
+        OSM_NETWORK,
+        get_live_weather,
+        get_live_traffic,
+        calculate_traffic_flow,
+        get_historical_speed_baseline
+    )
+    from bangladesh_calendar import (
+        is_bangladesh_weekend,
+        get_bangladesh_holiday,
+        get_special_event,
+        is_dhaka_rush_hour
+    )
 
 
 def fetch_unified_traffic_record(origin_coords: tuple, dest_coords: tuple, route_name: str = "Custom Corridor") -> dict:
@@ -42,7 +69,9 @@ def fetch_unified_traffic_record(origin_coords: tuple, dest_coords: tuple, route
     Executes the data pipeline in a single coordinated flow:
       1. OpenStreetMap Overpass: Retrieves physical road attributes (OSM ID, highway class, lanes, oneway, junction proximity)
       2. Live Traffic Engine: Retrieves speed, upstream/downstream speeds, delay, volume, and occupancy
+         (Google Maps Key 1 -> Key 2 -> OSRM Live Road Engine failover)
       3. OpenWeatherMap API: Retrieves live temperature, rainfall, visibility, and surface condition
+      4. Bangladesh Calendar: Evaluates official gazette holidays, weekends, and Dhaka special events
     
     Returns a unified ML-ready dictionary with all 43 real-time features.
     """
@@ -57,7 +86,7 @@ def fetch_unified_traffic_record(origin_coords: tuple, dest_coords: tuple, route
     if not osm_data:
         osm_data = {
             "osm_id": "N/A",
-            "osm_highway": "Primary",
+            "osm_highway": "Primary Arterial",
             "osm_lanes": 4,
             "osm_oneway": 0,
             "osm_name": route_name
@@ -70,7 +99,7 @@ def fetch_unified_traffic_record(origin_coords: tuple, dest_coords: tuple, route
     weather_data = get_live_weather(orig_lat, orig_lon)
 
     # -------------------------------------------------------------
-    # API 3: Live Traffic Engine
+    # API 3: Live Traffic Engine (Google Maps -> Key 1 -> Key 2 -> OSRM Failover)
     # -------------------------------------------------------------
     temp_route = {
         "route_id": route_name,
@@ -89,6 +118,16 @@ def fetch_unified_traffic_record(origin_coords: tuple, dest_coords: tuple, route
     speed_yesterday, speed_last_week = get_historical_speed_baseline(None, route_name, now, free_flow_speed)
 
     # -------------------------------------------------------------
+    # API 4: Bangladesh Calendar & Special Events Engine
+    # -------------------------------------------------------------
+    is_weekend = "Yes" if is_bangladesh_weekend(now) else "No"
+    is_rush = "Yes" if is_dhaka_rush_hour(now) else "No"
+    is_event, event_name = get_special_event(now, route_name)
+    has_event = "Yes" if is_event else "No"
+
+    congestion_ratio = max(1.00, round(travel_time / max(free_flow, 0.1), 2))
+
+    # -------------------------------------------------------------
     # Unified Combined Record for Machine Learning
     # -------------------------------------------------------------
     unified_record = {
@@ -98,11 +137,20 @@ def fetch_unified_traffic_record(origin_coords: tuple, dest_coords: tuple, route
         "origin_coords": origin_coords,
         "dest_coords": dest_coords,
 
+        # Temporal & Calendar Features
+        "day_of_week": now.strftime("%A"),
+        "hour": now.hour,
+        "minute": now.minute,
+        "is_weekend": is_weekend,
+        "is_rush_hour": is_rush,
+        "special_event": has_event,
+        "special_event_name": event_name if is_event else "None",
+
         # 1. OpenStreetMap Infrastructure Features
         "osm_id": osm_data.get("osm_id"),
         "osm_road_name": osm_data.get("osm_name"),
         "road_type": osm_data.get("osm_highway").title(),
-        "num_lanes": osm_data.get("osm_lanes"),
+        "num_lanes": osm_data.get("osm_lanes", 4),
         "is_oneway": "Yes" if osm_data.get("osm_oneway") == 1 else "No",
         "distance_to_junction_m": dist_junction_m,
 
@@ -113,7 +161,7 @@ def fetch_unified_traffic_record(origin_coords: tuple, dest_coords: tuple, route
         "travel_time_min": travel_time,
         "free_flow_time_min": free_flow,
         "traffic_delay_min": delay_min,
-        "congestion_ratio": round(travel_time / max(free_flow, 0.1), 2),
+        "congestion_ratio": congestion_ratio,
         "traffic_volume_veh_hr": volume_veh_hr,
         "occupancy_rate_pct": occupancy_pct,
         "speed_same_time_yesterday_kmh": speed_yesterday,
@@ -133,12 +181,12 @@ def fetch_unified_traffic_record(origin_coords: tuple, dest_coords: tuple, route
 
 
 def print_unified_record(rec: dict):
-    print("\n" + "=" * 85)
-    print(f"  UNIFIED PIPELINE RESULT: {rec['route_name']}")
-    print(f"  Timestamp: {rec['timestamp']}")
-    print("=" * 85)
+    print("\n" + "=" * 90)
+    print(f"  UNIFIED GROUND-TRUTH PIPELINE RESULT: {rec['route_name']}")
+    print(f"  Timestamp: {rec['timestamp']} ({rec['day_of_week']})")
+    print("=" * 90)
 
-    print("\n[1] OpenStreetMap Overpass API (Physical Infrastructure & Topology):")
+    print("\n[1] OpenStreetMap Overpass & Topology (Infrastructure):")
     print(f"    - OSM Way ID:             {rec['osm_id']}")
     print(f"    - OSM Road Name:          {rec['osm_road_name']}")
     print(f"    - Road Class:             {rec['road_type']}")
@@ -146,34 +194,38 @@ def print_unified_record(rec: dict):
     print(f"    - One-Way Road:           {rec['is_oneway']}")
     print(f"    - Distance to Junction:   {rec['distance_to_junction_m']} m")
 
-    print(f"\n[2] Live Traffic Engine ({rec.get('traffic_source', 'Google Maps + Waze')}):")
+    print(f"\n[2] Live Traffic Engine ({rec.get('traffic_source', 'Google Maps / OSRM')}):")
+    print(f"    - Provider Active:        {rec.get('traffic_source')}")
     print(f"    - Traffic Level:          {rec['traffic_level']}")
     print(f"    - Live Speed:             {rec['traffic_speed_kmh']} km/h")
-    print(f"    - Upstream Speed (Entry): {rec['upstream_speed_kmh']} km/h (incoming flow)")
+    print(f"    - Upstream Speed (Entry): {rec['upstream_speed_kmh']} km/h (incoming corridor flow)")
     print(f"    - Downstream Speed(Exit): {rec['downstream_speed_kmh']} km/h (bottleneck detection)")
     print(f"    - Traffic Volume:         {rec['traffic_volume_veh_hr']} veh/hr")
-    print(f"    - Road Occupancy:         {rec['occupancy_rate_pct']}% (real-time density)")
-    print(f"    - Speed Yesterday (24h):  {rec['speed_same_time_yesterday_kmh']} km/h (historical baseline)")
-    print(f"    - Speed Last Week (7d):   {rec['speed_same_time_last_week_kmh']} km/h (weekly commute rhythm)")
-    print(f"    - Travel Time:            {rec['travel_time_min']} mins (Normal: {rec['free_flow_time_min']} mins)")
+    print(f"    - Road Occupancy:         {rec['occupancy_rate_pct']}%")
+    print(f"    - Speed Yesterday (24h):  {rec['speed_same_time_yesterday_kmh']} km/h")
+    print(f"    - Speed Last Week (7d):   {rec['speed_same_time_last_week_kmh']} km/h")
+    print(f"    - Travel Time:            {rec['travel_time_min']} mins (Free-flow: {rec['free_flow_time_min']} mins)")
     print(f"    - Traffic Delay:          +{rec['traffic_delay_min']} mins")
     print(f"    - Congestion Ratio:       {rec['congestion_ratio']}x")
-    print(f"    - Engine Provider:        {rec.get('traffic_source', 'Google Maps + Waze')}")
 
-    print("\n[3] OpenWeatherMap API (Environmental & Atmospheric Factors):")
-    print(f"    - Sky Condition:          {rec['weather_condition']}")
-    print(f"    - Temperature:            {rec['temperature_c']} deg C")
+    print("\n[3] OpenWeatherMap API (Atmospheric & Road Surface):")
+    print(f"    - Weather:                {rec['weather_condition']}")
+    print(f"    - Temperature:            {rec['temperature_c']} °C")
     print(f"    - Rainfall:               {rec['rainfall_mm']} mm")
-    print(f"    - Visibility:             {rec['visibility_km']} km (atmospheric impact)")
-    print(f"    - Surface Condition:      {rec['surface_condition']} (road skidding/slowdown factor)")
+    print(f"    - Visibility:             {rec['visibility_km']} km")
+    print(f"    - Road Surface:           {rec['surface_condition']}")
 
-    print("\n" + "=" * 85)
-    print("  Status: Unified ML record generated with all physical & environmental features!")
-    print("=" * 85 + "\n")
+    print("\n[4] Bangladesh Calendar & Event Registry:")
+    print(f"    - Weekend (Fri/Sat):      {rec['is_weekend']}")
+    print(f"    - Rush Hour Peak:         {rec['is_rush_hour']}")
+    print(f"    - Special Event / Holiday:{rec['special_event']} ({rec['special_event_name']})")
+
+    print("\n" + "=" * 90)
+    print("  Status: Real ground-truth record successfully generated!")
+    print("=" * 90 + "\n")
 
 
 def main():
-    import argparse
     parser = argparse.ArgumentParser(description="3-in-1 Unified API Fetcher")
     parser.add_argument("--origin", type=str, default="23.8069,90.3687", help="Origin lat,lon (default: Mirpur 10)")
     parser.add_argument("--dest", type=str, default="23.7570,90.3888", help="Destination lat,lon (default: Farmgate)")

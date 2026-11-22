@@ -192,7 +192,7 @@ export const OFFICIAL_ROUTES_RAW = [
   { id: "R26", path: "Mirpur 10 -> Kazipara -> Sheorapara -> Agargaon -> Bijoy Sarani -> Farmgate" },
   { id: "R27", path: "Savar Bus Stand -> Hemayetpur -> Aminbazar -> Technical -> Shyamoli -> Mohammadpur" },
   { id: "R28", path: "Ashulia Bridge -> Dhour -> Kamarpara -> Uttara North -> Diabari Metro Station" },
-  { id: "R29", path: "ECB Chattor -> Mirpur DOHS -> Pallabi -> Mirpur 12 -> Kalshi -> ECB Chattor" },
+  { id: "R29", path: "ECB Chattor -> Mirpur DOHS -> Pallabi -> Mirpur 12 -> Kalshi" },
   { id: "R30", path: "Motijheel -> Dainik Bangla -> Kakrail -> Malibagh -> Rampura -> Badda" },
   { id: "R31", path: "Dhanmondi 27 -> Shyamoli -> Technical -> Gabtoli -> Savar -> Nabinagar" },
   { id: "R32", path: "Uttara House Building -> Uttara Rajlokkhi -> Airport -> Khilkhet -> Kuril Bisso Road" },

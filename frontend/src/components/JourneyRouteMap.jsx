@@ -6,9 +6,15 @@ import { API_BASE, fetchWithTimeout } from '../api.js';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 const TRAFFIC_COLORS = {
-  High:   '#dc2626', // Red
-  Medium: '#eab308', // Yellow
-  Low:    '#16a34a', // Green
+  High:        '#dc2626', // Red
+  Medium:      '#eab308', // Yellow
+  Low:         '#16a34a', // Green
+  NORMAL:      '#16a34a',
+  MODERATE:    '#eab308',
+  SLOW:        '#eab308',
+  HEAVY:       '#ea580c',
+  SEVERE:      '#dc2626',
+  TRAFFIC_JAM: '#dc2626',
 };
 
 const TRAFFIC_LABELS = {

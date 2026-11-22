@@ -184,7 +184,7 @@ VERIFIED_OSM_IDS = {
     "R26: Mirpur 10 -> Farmgate": "way/24787810",
     "R27: Savar Bus Stand -> Mohammadpur": "way/956288927",
     "R28: Ashulia Bridge -> Diabari Metro Station": "way/340140992",
-    "R29: ECB Chattor -> ECB Chattor": "way/284476598",
+    "R29: ECB Chattor -> Kalshi": "way/284476598",
     "R30: Motijheel -> Badda": "way/655281685",
     "R31: Dhanmondi 27 -> Nabinagar": "way/1063495698",
     "R32: Uttara House Building -> Kuril Bisso Road": "way/1390687576",

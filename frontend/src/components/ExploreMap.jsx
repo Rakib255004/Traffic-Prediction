@@ -38,13 +38,15 @@ import { DHAKA_BYPASS_WAYPOINTS } from '../utils/dhakaRoutesData.js';
 
 // ── Color Schemes & Badges ───────────────────────────────────────────────────
 const LEVEL_COLORS = {
-  NORMAL:   '#16a34a', // Standard traffic green
-  LOW:      '#16a34a',
-  MODERATE: '#f59e0b', // Amber
-  MEDIUM:   '#f59e0b',
-  HEAVY:    '#ea580c', // Deep orange
-  SEVERE:   '#dc2626', // Traffic red
-  HIGH:     '#dc2626',
+  NORMAL:      '#16a34a', // Standard traffic green
+  LOW:         '#16a34a',
+  MODERATE:    '#f59e0b', // Amber
+  MEDIUM:      '#f59e0b',
+  SLOW:        '#f59e0b',
+  HEAVY:       '#ea580c', // Deep orange
+  SEVERE:      '#dc2626', // Traffic red
+  HIGH:        '#dc2626',
+  TRAFFIC_JAM: '#dc2626',
 };
 
 // 100% Free basemap tile providers (Zero API Key required, Zero Watermarks)

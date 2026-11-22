@@ -1119,20 +1119,20 @@ export const OFFICIAL_ROUTES = [
   },
   {
     "route_code": "R29",
-    "route_id": "R29: ECB Chattor -> ECB Chattor",
-    "route_path": "ECB Chattor -> Mirpur DOHS -> Pallabi -> Mirpur 12 -> Kalshi -> ECB Chattor",
+    "route_id": "R29: ECB Chattor -> Kalshi",
+    "route_path": "ECB Chattor -> Mirpur DOHS -> Pallabi -> Mirpur 12 -> Kalshi",
     "origin_name": "ECB Chattor",
-    "dest_name": "ECB Chattor",
+    "dest_name": "Kalshi",
     "origin_coords": [
       23.8228,
       90.3932
     ],
     "dest_coords": [
-      23.8228,
-      90.3932
+      23.8241,
+      90.378
     ],
-    "road_length_km": 8.54,
-    "free_flow_time_min": 13.5,
+    "road_length_km": 8.25,
+    "free_flow_time_min": 13.8,
     "road_type": "Primary Arterial"
   },
   {
@@ -1970,7 +1970,7 @@ export const CORRIDOR_HISTORICAL_STATS = {
   },
   "R29": {
     "count": 13,
-    "dist_km": 8.55,
+    "dist_km": 8.25,
     "avg_speed": 46.9,
     "min_speed": 35.2,
     "max_speed": 50.0,
