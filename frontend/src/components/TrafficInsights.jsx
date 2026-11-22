@@ -794,13 +794,16 @@ export default function TrafficInsights() {
             {/* Dynamic Legend based on active corridor requirement */}
             <div className="flex items-center gap-3 font-medium text-slate-700">
               <span className="flex items-center gap-1.5">
-                <span className="w-3 h-2 rounded bg-red-500 inline-block" /> Heavy (≥{CORRIDOR_PRESETS[corridorThresholdPreset]?.heavy || 30} corridors)
+                <span className="w-3 h-2 rounded bg-rose-500 inline-block" /> Severe
               </span>
               <span className="flex items-center gap-1.5">
-                <span className="w-3 h-2 rounded bg-amber-500 inline-block" /> Moderate ({CORRIDOR_PRESETS[corridorThresholdPreset]?.moderate || 10}–{(CORRIDOR_PRESETS[corridorThresholdPreset]?.heavy || 30) - 1})
+                <span className="w-3 h-2 rounded bg-orange-500 inline-block" /> Heavy
               </span>
               <span className="flex items-center gap-1.5">
-                <span className="w-3 h-2 rounded bg-blue-500 inline-block" /> Light (&lt;{CORRIDOR_PRESETS[corridorThresholdPreset]?.moderate || 10})
+                <span className="w-3 h-2 rounded bg-amber-400 inline-block" /> Moderate
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="w-3 h-2 rounded bg-emerald-500 inline-block" /> Normal
               </span>
             </div>
 
@@ -829,34 +832,37 @@ export default function TrafficInsights() {
             const maxVal = Math.max(...stats.hourData.map(h => h.value), 1);
             const height = d.value > 0 ? Math.max((d.value / maxVal) * 100, 5) : 0;
             const avgCorridors = Number(((d.pct / 100) * 50).toFixed(1));
-            const activePreset = CORRIDOR_PRESETS[corridorThresholdPreset] || CORRIDOR_PRESETS.STANDARD;
-
-            let barColor = 'bg-slate-200';
-            let statusText = 'Light Flow';
-            let statusColor = 'text-blue-400';
-
-            if (avgCorridors >= activePreset.heavy) {
-              barColor = 'bg-red-500';
-              statusText = 'Heavy Congestion';
-              statusColor = 'text-red-400';
-            } else if (avgCorridors >= activePreset.moderate) {
-              barColor = 'bg-amber-500';
-              statusText = 'Moderate Congestion';
-              statusColor = 'text-amber-400';
-            } else if (d.total > 0) {
-              barColor = 'bg-blue-500';
-              statusText = 'Light Flow';
-              statusColor = 'text-blue-400';
-            }
 
             return (
               <div key={d.label} className="flex-1 h-full flex flex-col justify-end items-center gap-1.5 group relative">
-                {/* Column background track + filled bar */}
+                {/* Column background track + multi-tier stacked filled bar */}
                 <div className="w-full flex-1 flex flex-col justify-end bg-slate-50 hover:bg-slate-100 rounded-t overflow-hidden transition-colors">
                   <div
-                    className={`w-full rounded-t transition-all duration-300 ${barColor} group-hover:brightness-110`}
-                    style={{ height: `${height}%`, minHeight: d.value > 0 ? '4px' : '0px' }}
-                  />
+                    className="w-full rounded-t overflow-hidden flex flex-col justify-end transition-all duration-300 group-hover:brightness-110"
+                    style={{ height: `${height}%`, minHeight: d.value > 0 ? '6px' : '0px' }}
+                  >
+                    {/* Severe layer (Red) on top */}
+                    {d.severe > 0 && d.congested > 0 && (
+                      <div
+                        className="w-full bg-rose-500 transition-all duration-300"
+                        style={{ height: `${(d.severe / d.congested) * 100}%` }}
+                      />
+                    )}
+                    {/* Heavy layer (Orange) in middle */}
+                    {d.heavy > 0 && d.congested > 0 && (
+                      <div
+                        className="w-full bg-orange-500 transition-all duration-300"
+                        style={{ height: `${(d.heavy / d.congested) * 100}%` }}
+                      />
+                    )}
+                    {/* Moderate layer (Amber) at base */}
+                    {d.moderate > 0 && d.congested > 0 && (
+                      <div
+                        className="w-full bg-amber-400 transition-all duration-300"
+                        style={{ height: `${(d.moderate / d.congested) * 100}%` }}
+                      />
+                    )}
+                  </div>
                 </div>
                 {/* Hour label */}
                 <span className="text-[10px] text-slate-500 font-medium leading-none select-none">
@@ -865,12 +871,15 @@ export default function TrafficInsights() {
                 {/* Hover Tooltip */}
                 <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 bg-slate-900 text-white text-[11px] font-medium rounded-lg px-2.5 py-1.5 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-20 shadow-lg border border-slate-700 space-y-0.5">
                   <div className="font-bold text-slate-200">{d.label} · {d.period}</div>
-                  <div className={`font-bold ${statusColor}`}>
-                    ● {statusText} (~{avgCorridors} of 50 corridors)
+                  <div className="flex items-center gap-1.5 text-[10px] pt-0.5">
+                    <span className="text-emerald-400 font-semibold">{d.normalPct}% Normal</span> · 
+                    <span className="text-amber-400 font-semibold">{d.modPct}% Mod</span> · 
+                    <span className="text-orange-400 font-semibold">{d.heavyPct}% Hvy</span> · 
+                    <span className="text-rose-400 font-semibold">{d.sevPct}% Sev</span>
                   </div>
-                  <div className="text-slate-300">{d.value.toLocaleString()} congested / {d.total.toLocaleString()} total</div>
+                  <div className="text-slate-300">{d.congested.toLocaleString()} congested / {d.total.toLocaleString()} total</div>
                   <div className="text-slate-300">Avg Speed: {d.avgSpeed} km/h · Delay: +{d.avgDelay} min</div>
-                  <div className="text-amber-400 font-semibold">{d.pct}% Congestion Rate</div>
+                  <div className="text-amber-400 font-semibold">{d.pct}% Congestion Rate (~{avgCorridors}/50 corridors)</div>
                 </div>
               </div>
             );
