@@ -11,15 +11,32 @@ const getDayName = (dateStr) => {
 };
 
 const LEVEL_CONFIG = {
-  High: { bg: 'bg-red-50', border: 'border-red-200', badge: 'bg-red-500 text-white', dot: 'bg-red-500', label: 'High Traffic', desc: 'Severe congestion expected. Allow extra time.' },
-  Medium: { bg: 'bg-amber-50', border: 'border-amber-200', badge: 'bg-amber-400 text-white', dot: 'bg-amber-400', label: 'Moderate Traffic', desc: 'Moderate delays likely. Plan accordingly.' },
-  Low: { bg: 'bg-green-50', border: 'border-green-200', badge: 'bg-green-500 text-white', dot: 'bg-green-500', label: 'Low Traffic', desc: 'Roads are flowing freely. Good time to travel.' },
+  Severe: { bg: 'bg-rose-50', border: 'border-rose-200', badge: 'bg-rose-600 text-white', dot: 'bg-rose-600', label: 'Severe Traffic', desc: 'Critical gridlock & heavy delay expected. Consider alternate routes.' },
+  Heavy: { bg: 'bg-orange-50', border: 'border-orange-200', badge: 'bg-orange-500 text-white', dot: 'bg-orange-500', label: 'Heavy Traffic', desc: 'Significant congestion and bottlenecks likely. Allow extra travel time.' },
+  Moderate: { bg: 'bg-amber-50', border: 'border-amber-200', badge: 'bg-amber-500 text-white', dot: 'bg-amber-500', label: 'Moderate Traffic', desc: 'Moderate delays likely. Steady flow with occasional slowdowns.' },
+  Normal: { bg: 'bg-emerald-50', border: 'border-emerald-200', badge: 'bg-emerald-600 text-white', dot: 'bg-emerald-600', label: 'Normal Traffic', desc: 'Roads are flowing freely near baseline speeds.' },
+  // Backward compatibility mappings
+  High: { bg: 'bg-rose-50', border: 'border-rose-200', badge: 'bg-rose-600 text-white', dot: 'bg-rose-600', label: 'High Traffic', desc: 'Severe congestion expected. Allow extra time.' },
+  Medium: { bg: 'bg-amber-50', border: 'border-amber-200', badge: 'bg-amber-500 text-white', dot: 'bg-amber-500', label: 'Moderate Traffic', desc: 'Moderate delays likely. Plan accordingly.' },
+  Low: { bg: 'bg-emerald-50', border: 'border-emerald-200', badge: 'bg-emerald-600 text-white', dot: 'bg-emerald-600', label: 'Normal Traffic', desc: 'Roads are flowing freely. Good time to travel.' },
+  SEVERE: { bg: 'bg-rose-50', border: 'border-rose-200', badge: 'bg-rose-600 text-white', dot: 'bg-rose-600', label: 'Severe Traffic', desc: 'Critical gridlock expected.' },
+  HEAVY: { bg: 'bg-orange-50', border: 'border-orange-200', badge: 'bg-orange-500 text-white', dot: 'bg-orange-500', label: 'Heavy Traffic', desc: 'Heavy bottlenecks expected.' },
+  MODERATE: { bg: 'bg-amber-50', border: 'border-amber-200', badge: 'bg-amber-500 text-white', dot: 'bg-amber-500', label: 'Moderate Traffic', desc: 'Moderate congestion expected.' },
+  NORMAL: { bg: 'bg-emerald-50', border: 'border-emerald-200', badge: 'bg-emerald-600 text-white', dot: 'bg-emerald-600', label: 'Normal Traffic', desc: 'Free-flow traffic.' },
 };
 
 const SEGMENT_TRAFFIC_STYLES = {
-  Low: 'bg-green-50 text-green-700 border-green-200',
+  Normal: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+  NORMAL: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+  Low: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+  Moderate: 'bg-amber-50 text-amber-700 border-amber-200',
+  MODERATE: 'bg-amber-50 text-amber-700 border-amber-200',
   Medium: 'bg-amber-50 text-amber-700 border-amber-200',
-  High: 'bg-red-50 text-red-700 border-red-200',
+  Heavy: 'bg-orange-50 text-orange-700 border-orange-200',
+  HEAVY: 'bg-orange-50 text-orange-700 border-orange-200',
+  Severe: 'bg-rose-50 text-rose-700 border-rose-200',
+  SEVERE: 'bg-rose-50 text-rose-700 border-rose-200',
+  High: 'bg-rose-50 text-rose-700 border-rose-200',
 };
 
 function RoutePathSection({ steps = [], checkpoints = [], roadSegments = [] }) {

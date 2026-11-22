@@ -150,10 +150,13 @@ function RouteRecordsList({ routes }) {
             <span className="w-2.5 h-2.5 rounded-sm bg-emerald-500 inline-block" /> Normal
           </span>
           <span className="inline-flex items-center gap-1.5">
-            <span className="w-2.5 h-2.5 rounded-sm bg-amber-400 inline-block" /> Slow
+            <span className="w-2.5 h-2.5 rounded-sm bg-amber-400 inline-block" /> Moderate
           </span>
           <span className="inline-flex items-center gap-1.5">
-            <span className="w-2.5 h-2.5 rounded-sm bg-rose-500 inline-block" /> Jam
+            <span className="w-2.5 h-2.5 rounded-sm bg-orange-500 inline-block" /> Heavy
+          </span>
+          <span className="inline-flex items-center gap-1.5">
+            <span className="w-2.5 h-2.5 rounded-sm bg-rose-500 inline-block" /> Severe
           </span>
         </div>
       </div>
@@ -163,8 +166,9 @@ function RouteRecordsList({ routes }) {
         {filtered.map((r, idx) => {
           const widthPct = Math.max((r.value / maxVal) * 100, 1.5);
           const nPct = r.normalPct ?? (r.value > 0 ? Math.max(0, 100 - r.pct) : 0);
-          const sPct = r.slowPct ?? 0;
-          const jPct = r.jamPct ?? r.pct ?? 0;
+          const mPct = r.modPct ?? r.slowPct ?? 0;
+          const hPct = r.heavyPct ?? 0;
+          const sPct = r.sevPct ?? r.jamPct ?? r.pct ?? 0;
           return (
             <div
               key={r.route_id}
@@ -181,14 +185,14 @@ function RouteRecordsList({ routes }) {
               </span>
 
               {/* Corridor Path */}
-              <span className="w-48 sm:w-60 text-xs font-medium text-slate-700 truncate shrink-0" title={r.route_name || r.label}>
+              <span className="w-44 sm:w-56 text-xs font-medium text-slate-700 truncate shrink-0" title={r.route_name || r.label}>
                 {r.route_name || r.label}
               </span>
 
-              {/* Stacked Percentage Bar */}
+              {/* Stacked Percentage Bar (Normal | Moderate | Heavy | Severe) */}
               <div
                 className="flex-1 bg-slate-100 rounded-full h-4 overflow-hidden relative"
-                title={r.value > 0 ? `Normal: ${nPct}% (${r.normal ?? 0}) | Slow: ${sPct}% (${r.slow ?? 0}) | Jam: ${jPct}% (${r.jam ?? 0})` : 'No records yet'}
+                title={r.value > 0 ? `Normal: ${nPct}% (${r.normal ?? 0}) | Moderate: ${mPct}% (${r.moderate ?? 0}) | Heavy: ${hPct}% (${r.heavy ?? 0}) | Severe: ${sPct}% (${r.severe ?? 0})` : 'No records yet'}
               >
                 {r.value > 0 && (
                   <div
@@ -201,16 +205,22 @@ function RouteRecordsList({ routes }) {
                         style={{ width: `${nPct}%` }}
                       />
                     )}
-                    {sPct > 0 && (
+                    {mPct > 0 && (
                       <div
                         className="h-full bg-amber-400 transition-all duration-300"
-                        style={{ width: `${sPct}%` }}
+                        style={{ width: `${mPct}%` }}
                       />
                     )}
-                    {jPct > 0 && (
+                    {hPct > 0 && (
+                      <div
+                        className="h-full bg-orange-500 transition-all duration-300"
+                        style={{ width: `${hPct}%` }}
+                      />
+                    )}
+                    {sPct > 0 && (
                       <div
                         className="h-full bg-rose-500 transition-all duration-300"
-                        style={{ width: `${jPct}%` }}
+                        style={{ width: `${sPct}%` }}
                       />
                     )}
                   </div>
@@ -224,16 +234,18 @@ function RouteRecordsList({ routes }) {
 
               {/* Breakdown % */}
               <span
-                className={`text-[10px] font-semibold px-2 py-0.5 rounded w-24 text-center shrink-0 ${
-                  jPct >= 35
+                className={`text-[10px] font-semibold px-2 py-0.5 rounded w-28 text-center shrink-0 ${
+                  sPct >= 20
                     ? 'bg-rose-50 text-rose-600 border border-rose-100'
-                    : sPct >= 30
+                    : hPct >= 25
+                    ? 'bg-orange-50 text-orange-600 border border-orange-100'
+                    : mPct >= 30
                     ? 'bg-amber-50 text-amber-700 border border-amber-100'
                     : 'bg-emerald-50 text-emerald-700 border border-emerald-100'
                 }`}
-                title={`Normal ${nPct}% · Slow ${sPct}% · Jam ${jPct}%`}
+                title={`Normal: ${nPct}% · Moderate: ${mPct}% · Heavy: ${hPct}% · Severe: ${sPct}%`}
               >
-                {r.value > 0 ? `${nPct}% N · ${jPct}% J` : '0%'}
+                {r.value > 0 ? `${nPct}% N · ${mPct}% M · ${sPct}% S` : '0%'}
               </span>
             </div>
           );
@@ -354,21 +366,23 @@ export default function TrafficInsights() {
   const stats = useMemo(() => {
     if (!records.length) return null;
 
-    // Traffic level distribution
-    const levelCounts = { NORMAL: 0, SLOW: 0, TRAFFIC_JAM: 0 };
+    // Traffic level distribution (4 canonical classes: Normal | Moderate | Heavy | Severe)
+    const levelCounts = { NORMAL: 0, MODERATE: 0, HEAVY: 0, SEVERE: 0 };
     records.forEach(r => {
       const lvl = (r.traffic_level || '').toUpperCase();
       if (lvl === 'NORMAL')      levelCounts.NORMAL++;
-      else if (lvl === 'SLOW' || lvl === 'MODERATE') levelCounts.SLOW++;
-      else if (lvl === 'TRAFFIC_JAM' || lvl === 'HEAVY' || lvl === 'SEVERE') levelCounts.TRAFFIC_JAM++;
+      else if (lvl === 'MODERATE' || lvl === 'SLOW') levelCounts.MODERATE++;
+      else if (lvl === 'HEAVY') levelCounts.HEAVY++;
+      else if (lvl === 'SEVERE' || lvl === 'TRAFFIC_JAM') levelCounts.SEVERE++;
       else levelCounts.NORMAL++;
     });
 
-    // Map to Low / Medium / High for user-friendly display
+    // 4 canonical traffic classes for visualization
     const levelDisplay = [
-      { label: 'Low (Normal)',  value: levelCounts.NORMAL },
-      { label: 'Medium (Slow)', value: levelCounts.SLOW },
-      { label: 'High (Jam)',    value: levelCounts.TRAFFIC_JAM },
+      { label: 'Normal',   value: levelCounts.NORMAL },
+      { label: 'Moderate', value: levelCounts.MODERATE },
+      { label: 'Heavy',    value: levelCounts.HEAVY },
+      { label: 'Severe',   value: levelCounts.SEVERE },
     ];
 
     // Commute period labeling helper
@@ -385,7 +399,18 @@ export default function TrafficInsights() {
     // Congestion by hour (counted from 1 to 24 instead of 0)
     const hourBuckets = {};
     for (let h = 1; h <= 24; h++) {
-      hourBuckets[h] = { total: 0, congested: 0, normal: 0, slow: 0, jams: 0, speeds: [], delays: [], worstRoute: null, worstDelay: -1 };
+      hourBuckets[h] = {
+        total: 0,
+        congested: 0,
+        normal: 0,
+        moderate: 0,
+        heavy: 0,
+        severe: 0,
+        speeds: [],
+        delays: [],
+        worstRoute: null,
+        worstDelay: -1
+      };
     }
 
     const formatHourRange12 = (hr) => {
@@ -422,11 +447,14 @@ export default function TrafficInsights() {
       }
 
       const lvl = (r.traffic_level || r.target_traffic_level || '').toUpperCase();
-      if (['TRAFFIC_JAM', 'HEAVY', 'SEVERE'].includes(lvl)) {
-        b.jams++;
+      if (lvl === 'SEVERE' || lvl === 'TRAFFIC_JAM') {
+        b.severe++;
         b.congested++;
-      } else if (['SLOW', 'MODERATE'].includes(lvl)) {
-        b.slow++;
+      } else if (lvl === 'HEAVY') {
+        b.heavy++;
+        b.congested++;
+      } else if (lvl === 'MODERATE' || lvl === 'SLOW') {
+        b.moderate++;
         b.congested++;
       } else {
         b.normal++;
@@ -438,9 +466,10 @@ export default function TrafficInsights() {
         const hourNum = parseInt(h, 10);
         const avgSpeed = v.speeds.length ? Number((v.speeds.reduce((a, c) => a + c, 0) / v.speeds.length).toFixed(1)) : 35.0;
         const avgDelay = v.delays.length ? Number((v.delays.reduce((a, c) => a + c, 0) / v.delays.length).toFixed(1)) : 0.0;
-        const jamPct = v.total > 0 ? Math.round((v.jams / v.total) * 100) : 0;
-        const slowPct = v.total > 0 ? Math.round((v.slow / v.total) * 100) : 0;
-        const normalPct = v.total > 0 ? Math.max(0, 100 - jamPct - slowPct) : 0;
+        const sevPct = v.total > 0 ? Math.round((v.severe / v.total) * 100) : 0;
+        const heavyPct = v.total > 0 ? Math.round((v.heavy / v.total) * 100) : 0;
+        const modPct = v.total > 0 ? Math.round((v.moderate / v.total) * 100) : 0;
+        const normalPct = v.total > 0 ? Math.max(0, 100 - sevPct - heavyPct - modPct) : 0;
         return {
           label: hourNum === 24 ? '24:00 (Midnight)' : `${String(hourNum).padStart(2, '0')}:00`,
           timeWindow: formatHourRange12(hourNum),
@@ -449,12 +478,14 @@ export default function TrafficInsights() {
           value: v.congested,
           congested: v.congested,
           normal: v.normal,
-          slow: v.slow,
+          moderate: v.moderate,
+          heavy: v.heavy,
+          severe: v.severe,
           total: v.total,
-          jams: v.jams,
           normalPct,
-          slowPct,
-          jamPct,
+          modPct,
+          heavyPct,
+          sevPct,
           worstRoute: v.worstRoute,
           worstDelay: v.worstDelay > 0 ? Number(v.worstDelay.toFixed(1)) : null,
           avgSpeed,
@@ -495,8 +526,9 @@ export default function TrafficInsights() {
         total: 0,
         congested: 0,
         normal: 0,
-        slow: 0,
-        jam: 0,
+        moderate: 0,
+        heavy: 0,
+        severe: 0,
       };
     });
 
@@ -512,17 +544,21 @@ export default function TrafficInsights() {
           total: 0,
           congested: 0,
           normal: 0,
-          slow: 0,
-          jam: 0,
+          moderate: 0,
+          heavy: 0,
+          severe: 0,
         };
       }
       routeCounts[id].total++;
       const lvl = (r.traffic_level || r.target_traffic_level || '').toUpperCase();
-      if (lvl === 'TRAFFIC_JAM' || lvl === 'HEAVY' || lvl === 'SEVERE') {
-        routeCounts[id].jam++;
+      if (lvl === 'SEVERE' || lvl === 'TRAFFIC_JAM') {
+        routeCounts[id].severe++;
         routeCounts[id].congested++;
-      } else if (lvl === 'SLOW' || lvl === 'MODERATE') {
-        routeCounts[id].slow++;
+      } else if (lvl === 'HEAVY') {
+        routeCounts[id].heavy++;
+        routeCounts[id].congested++;
+      } else if (lvl === 'MODERATE' || lvl === 'SLOW') {
+        routeCounts[id].moderate++;
         routeCounts[id].congested++;
       } else {
         routeCounts[id].normal++;
@@ -532,17 +568,19 @@ export default function TrafficInsights() {
     const routeData = Object.values(routeCounts).map(v => {
       const codeNum = parseInt((v.route_code || '').replace('R', ''), 10) || 999;
       const total = v.total;
-      const jamPct = total > 0 ? Math.round((v.jam / total) * 100) : 0;
-      const slowPct = total > 0 ? Math.round((v.slow / total) * 100) : 0;
-      const normalPct = total > 0 ? Math.max(0, 100 - jamPct - slowPct) : 0;
+      const normalPct = total > 0 ? Math.round((v.normal / total) * 100) : 0;
+      const modPct = total > 0 ? Math.round((v.moderate / total) * 100) : 0;
+      const heavyPct = total > 0 ? Math.round((v.heavy / total) * 100) : 0;
+      const sevPct = total > 0 ? Math.max(0, 100 - normalPct - modPct - heavyPct) : 0;
       return {
         ...v,
         code_num: codeNum,
         label: v.route_id,
         value: total,
         normalPct,
-        slowPct,
-        jamPct,
+        modPct,
+        heavyPct,
+        sevPct,
         pct: total > 0 ? Math.round((v.congested / total) * 100) : 0,
       };
     }).sort((a, b) => {
@@ -708,9 +746,10 @@ export default function TrafficInsights() {
           title="Traffic Level Distribution"
           data={stats.levelDisplay}
           colorMap={{
-            'Low (Normal)':  '#22c55e',
-            'Medium (Slow)': '#f59e0b',
-            'High (Jam)':    '#ef4444',
+            'Normal':   '#10b981',
+            'Moderate': '#f59e0b',
+            'Heavy':    '#f97316',
+            'Severe':   '#ef4444',
           }}
         />
       </div>
@@ -726,7 +765,7 @@ export default function TrafficInsights() {
                 Live Sync
               </span>
             </div>
-            <p className="text-xs text-slate-400 mt-0.5">Number of congested observations (Slow + Jam) per hour across Dhaka (Hour 1 to 24)</p>
+            <p className="text-xs text-slate-400 mt-0.5">Number of congested observations (Moderate + Heavy + Severe) per hour across Dhaka (Hour 1 to 24)</p>
           </div>
 
           <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500">
@@ -846,7 +885,7 @@ export default function TrafficInsights() {
             <h3 className="text-sm font-semibold text-slate-800">Top 5 Peak Congestion Hours</h3>
             <p className="text-xs text-slate-400 mt-0.5">
               {peakSortMode === 'rate'
-                ? 'Ranked by congestion rate (% of snapshots Slow or Jammed)'
+                ? 'Ranked by congestion rate (% of snapshots Moderate, Heavy, or Severe)'
                 : peakSortMode === 'volume'
                 ? 'Ranked by total congested snapshots recorded across Dhaka'
                 : 'Ranked by longest average delay and slowdown severity'}
@@ -926,12 +965,14 @@ export default function TrafficInsights() {
                         <strong className="text-slate-800">+{h.avgDelay} min</strong>
                       </div>
                       <div className={`rounded-lg px-2 py-1 border ${
-                        h.jams > 0
+                        h.severe > 0
                           ? 'bg-rose-50/70 border-rose-100 text-rose-700'
+                          : h.heavy > 0
+                          ? 'bg-orange-50/70 border-orange-100 text-orange-700'
                           : 'bg-slate-50 border-slate-100 text-slate-500'
                       }`}>
-                        <span>Jams </span>
-                        <strong>{h.jams}</strong>
+                        <span>Severe </span>
+                        <strong>{h.severe}</strong>
                       </div>
                     </div>
 
@@ -945,19 +986,20 @@ export default function TrafficInsights() {
                 </div>
 
                 <div className="flex flex-wrap items-center gap-3 text-xs pl-9 lg:pl-0 shrink-0">
-                  {/* Stacked Normal / Slow / Jam mini bar */}
-                  <div className="w-32 sm:w-40">
+                  {/* Stacked Normal / Moderate / Heavy / Severe mini bar */}
+                  <div className="w-36 sm:w-44">
                     <div
                       className="h-2.5 w-full rounded-full bg-slate-100 overflow-hidden flex"
-                      title={`Normal: ${h.normalPct}% (${h.normal}) | Slow: ${h.slowPct}% (${h.slow}) | Jam: ${h.jamPct}% (${h.jams})`}
+                      title={`Normal: ${h.normalPct}% (${h.normal}) | Moderate: ${h.modPct}% (${h.moderate}) | Heavy: ${h.heavyPct}% (${h.heavy}) | Severe: ${h.sevPct}% (${h.severe})`}
                     >
                       {h.normalPct > 0 && <div className="h-full bg-emerald-500" style={{ width: `${h.normalPct}%` }} />}
-                      {h.slowPct > 0 && <div className="h-full bg-amber-400" style={{ width: `${h.slowPct}%` }} />}
-                      {h.jamPct > 0 && <div className="h-full bg-rose-500" style={{ width: `${h.jamPct}%` }} />}
+                      {h.modPct > 0 && <div className="h-full bg-amber-400" style={{ width: `${h.modPct}%` }} />}
+                      {h.heavyPct > 0 && <div className="h-full bg-orange-500" style={{ width: `${h.heavyPct}%` }} />}
+                      {h.sevPct > 0 && <div className="h-full bg-rose-500" style={{ width: `${h.sevPct}%` }} />}
                     </div>
                     <div className="flex justify-between text-[10px] text-slate-400 mt-0.5">
                       <span>{h.normalPct}% Normal</span>
-                      <span>{h.slowPct + h.jamPct}% Congested</span>
+                      <span>{h.heavyPct + h.sevPct}% Heavy/Severe</span>
                     </div>
                   </div>
 

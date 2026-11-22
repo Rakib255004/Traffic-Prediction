@@ -262,12 +262,23 @@ app.get('/api/analytics/routes', (req, res) => {
     records.forEach(r => {
       const id = r.road_route_id || 'Unknown';
       if (!routeCounts[id]) {
-        routeCounts[id] = { total: 0, congested: 0, speeds: [] };
+        routeCounts[id] = { total: 0, congested: 0, normal: 0, moderate: 0, heavy: 0, severe: 0, speeds: [] };
       }
       routeCounts[id].total++;
       const lvl = (r.traffic_level || '').toUpperCase();
-      if (lvl === 'SLOW' || lvl === 'MODERATE' || lvl === 'TRAFFIC_JAM' || lvl === 'HEAVY' || lvl === 'SEVERE') {
+      if (lvl === 'NORMAL') {
+        routeCounts[id].normal++;
+      } else if (lvl === 'MODERATE' || lvl === 'SLOW') {
+        routeCounts[id].moderate++;
         routeCounts[id].congested++;
+      } else if (lvl === 'HEAVY') {
+        routeCounts[id].heavy++;
+        routeCounts[id].congested++;
+      } else if (lvl === 'SEVERE' || lvl === 'TRAFFIC_JAM') {
+        routeCounts[id].severe++;
+        routeCounts[id].congested++;
+      } else {
+        routeCounts[id].normal++;
       }
       const s = parseFloat(r.traffic_speed_kmh);
       if (!isNaN(s)) routeCounts[id].speeds.push(s);
@@ -281,6 +292,10 @@ app.get('/api/analytics/routes', (req, res) => {
         name: m ? m[2] : name,
         total: v.total,
         congested: v.congested,
+        normal: v.normal,
+        moderate: v.moderate,
+        heavy: v.heavy,
+        severe: v.severe,
         pct: Math.round((v.congested / v.total) * 100),
         avg_speed: v.speeds.length ? Number((v.speeds.reduce((a, b) => a + b, 0) / v.speeds.length).toFixed(1)) : 25.0
       };

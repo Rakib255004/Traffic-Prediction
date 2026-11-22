@@ -9,18 +9,26 @@ const TRAFFIC_COLORS = {
   High:        '#dc2626', // Red
   Medium:      '#eab308', // Yellow
   Low:         '#16a34a', // Green
+  Normal:      '#16a34a',
   NORMAL:      '#16a34a',
+  Moderate:    '#eab308',
   MODERATE:    '#eab308',
   SLOW:        '#eab308',
+  Heavy:       '#ea580c',
   HEAVY:       '#ea580c',
+  Severe:      '#dc2626',
   SEVERE:      '#dc2626',
   TRAFFIC_JAM: '#dc2626',
 };
 
 const TRAFFIC_LABELS = {
-  High:   'High Congestion (Route-level)',
-  Medium: 'Moderate Congestion (Route-level)',
-  Low:    'Low Congestion (Route-level)',
+  Severe:   'Severe Congestion (Route-level)',
+  Heavy:    'Heavy Congestion (Route-level)',
+  Moderate: 'Moderate Congestion (Route-level)',
+  Normal:   'Normal Flow (Route-level)',
+  High:     'High Congestion (Route-level)',
+  Medium:   'Moderate Congestion (Route-level)',
+  Low:      'Low Congestion (Route-level)',
 };
 
 const PRIMARY_ROUTE_COLOR = '#2563eb'; // Blue
@@ -1126,9 +1134,10 @@ export default function JourneyRouteMap({
           </p>
           <div className="space-y-0.5 sm:space-y-1">
             {[
-              { label: 'Low',       color: TRAFFIC_COLORS.Low },
-              { label: 'Moderate',  color: TRAFFIC_COLORS.Medium },
-              { label: 'High',      color: TRAFFIC_COLORS.High },
+              { label: 'Normal',    color: '#16a34a' },
+              { label: 'Moderate',  color: '#eab308' },
+              { label: 'Heavy',     color: '#ea580c' },
+              { label: 'Severe',    color: '#dc2626' },
             ].map(({ label, color }) => (
               <div key={label} className="flex items-center gap-1.5 sm:gap-2">
                 <span className="w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-full shrink-0" style={{ backgroundColor: color }} />
