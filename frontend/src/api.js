@@ -633,3 +633,20 @@ export async function run10HourSimulationApi(params = {}) {
   }
   return null;
 }
+
+export async function trainRlRealLife(episodes = 1000) {
+  try {
+    const res = await fetchWithTimeout(`${API_BASE}/rl/train-real-life`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ episodes })
+    }, 45000);
+    if (res.ok) {
+      const json = await res.json();
+      if (json && json.success) return json.data;
+    }
+  } catch (err) {
+    console.warn('[API] /api/rl/train-real-life error:', err.message);
+  }
+  return null;
+}

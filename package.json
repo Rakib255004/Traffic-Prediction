@@ -16,7 +16,8 @@
     "deploy:firebase": "npm run build && firebase deploy --only hosting",
     "data:collect": "python data_collection/collect_data.py",
     "data:advisor": "python data_collection/route_advisor.py",
-    "data:restore": "python data_collection/restore_data.py"
+    "data:restore": "python data_collection/restore_data.py",
+    "rl:train": "node scripts/train_rl_real_life.js"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.119.2",

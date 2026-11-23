@@ -20,7 +20,7 @@ import { NODE_COORDINATES, DHAKA_BYPASS_WAYPOINTS, haversineKm } from './routesC
 import { buildOsmRouteGeometry } from './osmRouter.js';
 import { getAllBuses, getBusById, getBusStops, findBusesBetween } from './busService.js';
 import { supabase, checkDatabaseHealth } from './db.js';
-import { getRlStatus, evaluatePendingPredictions, startRlBackgroundWorker, startOsrmContinuousCollector, run10HourTrainingSimulation } from './rlEngine.js';
+import { getRlStatus, evaluatePendingPredictions, startRlBackgroundWorker, startOsrmContinuousCollector, run10HourTrainingSimulation, trainWithRealLifeData } from './rlEngine.js';
 
 // Resilient compression import (safe if module not present)
 let compression = null;
@@ -423,6 +423,18 @@ app.post('/api/rl/simulate-10h', async (req, res) => {
   try {
     const { corridorsCount = 5, startHour = 8, hoursCount = 10 } = req.body || {};
     const result = await run10HourTrainingSimulation({ corridorsCount, startHour, hoursCount });
+    res.json({ success: true, data: result });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 7b5. Real-Life Data Reinforcement Training & Stress Testing (500 - 2,000+ episodes)
+app.post('/api/rl/train-real-life', async (req, res) => {
+  try {
+    const { episodes = 1000, corridor = null } = req.body || {};
+    const count = Math.max(10, Math.min(5000, parseInt(episodes, 10) || 1000));
+    const result = await trainWithRealLifeData({ sampleCount: count, corridorFilter: corridor });
     res.json({ success: true, data: result });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });

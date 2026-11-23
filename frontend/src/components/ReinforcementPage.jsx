@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { fetchRlStatus } from '../api.js';
+import { fetchRlStatus, trainRlRealLife } from '../api.js';
 
 export default function ReinforcementPage() {
   const [data, setData] = useState(null);
@@ -10,6 +10,12 @@ export default function ReinforcementPage() {
   const [countdown, setCountdown] = useState(20);
   const [episodeFilter, setEpisodeFilter] = useState('ALL'); // ALL, SUCCESS, FAIL, PENDING
   const [hoveredSlice, setHoveredSlice] = useState(null);
+
+  // Real-life training & stress-test state
+  const [trainCount, setTrainCount] = useState(1000);
+  const [isTraining, setIsTraining] = useState(false);
+  const [trainingResult, setTrainingResult] = useState(null);
+  const [trainingError, setTrainingError] = useState(null);
 
   const isFetchingRef = useRef(false);
   const dataRef = useRef(null);
@@ -53,6 +59,26 @@ export default function ReinforcementPage() {
 
     return () => clearInterval(timer);
   }, [loadData]);
+
+  const handleRunTraining = async (episodes) => {
+    const count = Number(episodes || trainCount);
+    setIsTraining(true);
+    setTrainingError(null);
+    setTrainingResult(null);
+    try {
+      const res = await trainRlRealLife(count);
+      if (res) {
+        setTrainingResult(res);
+        await loadData(false);
+      } else {
+        setTrainingError('Training request returned no response. Ensure the backend server is online.');
+      }
+    } catch (err) {
+      setTrainingError(err.message || 'Error executing real-life training session.');
+    } finally {
+      setIsTraining(false);
+    }
+  };
 
   const metrics = data?.metrics || {
     total_evaluations: 0,
@@ -174,6 +200,168 @@ export default function ReinforcementPage() {
           <span>{error}</span>
         </div>
       )}
+
+      {/* ── Real-Life Stress-Test & Model Trainer Card ──────────────────────── */}
+      <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 rounded-2xl p-6 text-white shadow-lg border border-indigo-900/40 relative overflow-hidden">
+        {/* Ambient background glow */}
+        <div className="absolute -right-12 -top-12 w-64 h-64 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none"></div>
+        <div className="absolute -left-12 -bottom-12 w-64 h-64 bg-teal-500/10 rounded-full blur-3xl pointer-events-none"></div>
+
+        <div className="relative z-10">
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+            <div>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="px-2.5 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+                  ⚡ Real-Life Ground-Truth Training
+                </span>
+                <span className="text-xs text-slate-400 font-mono hidden sm:inline">
+                  211,680 Calibrated Dhaka Observations
+                </span>
+              </div>
+              <h2 className="text-lg font-bold text-white mt-1.5 flex items-center gap-2">
+                Batch Real-World Stress-Test & RL Q-Trainer (1,000 – 2,000 Episodes)
+              </h2>
+              <p className="text-xs text-slate-300 mt-1 max-w-3xl leading-relaxed">
+                Test and fine-tune the model against authentic Dhaka traffic journeys. The Q-learning agent evaluates prediction error vs ground truth, distributes rewards (+1.0 to -1.0), and updates corridor speed/delay multipliers in Supabase PostgreSQL in real-time.
+              </p>
+            </div>
+
+            {/* Episode Selector and Trigger */}
+            <div className="flex flex-wrap items-center gap-2 sm:gap-3 shrink-0">
+              <div className="flex items-center bg-slate-800/80 p-1 rounded-xl border border-slate-700/60 text-xs">
+                {[500, 1000, 2000].map((num) => (
+                  <button
+                    key={num}
+                    onClick={() => setTrainCount(num)}
+                    disabled={isTraining}
+                    className={`px-3 py-1.5 rounded-lg font-medium transition cursor-pointer disabled:opacity-50 ${
+                      trainCount === num
+                        ? 'bg-indigo-600 text-white font-bold shadow-xs'
+                        : 'text-slate-300 hover:text-white'
+                    }`}
+                  >
+                    {num.toLocaleString()} ep
+                  </button>
+                ))}
+              </div>
+
+              <button
+                onClick={() => handleRunTraining(trainCount)}
+                disabled={isTraining}
+                className="px-4 py-2 text-xs font-bold bg-emerald-500 hover:bg-emerald-600 active:scale-95 text-slate-950 rounded-xl transition flex items-center gap-2 shadow-md disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+              >
+                {isTraining ? (
+                  <>
+                    <svg className="w-4 h-4 animate-spin text-slate-950" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    <span>Training {trainCount.toLocaleString()} Episodes...</span>
+                  </>
+                ) : (
+                  <>
+                    <span>🚀</span>
+                    <span>Run Real-Life Test ({trainCount.toLocaleString()})</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+
+          {/* Active Training Status */}
+          {isTraining && (
+            <div className="mt-4 p-3.5 bg-indigo-900/40 border border-indigo-500/30 rounded-xl flex items-center gap-3 text-xs text-indigo-200 animate-pulse">
+              <span className="w-2 h-2 rounded-full bg-indigo-400 animate-ping"></span>
+              <span>
+                Evaluating {trainCount.toLocaleString()} real-world journeys from <strong>data/traffic_data.csv</strong>, adjusting Q-matrices, and syncing multipliers to Supabase...
+              </span>
+            </div>
+          )}
+
+          {/* Training Error */}
+          {trainingError && (
+            <div className="mt-4 p-3 bg-rose-900/40 border border-rose-500/40 rounded-xl flex items-center justify-between text-xs text-rose-200">
+              <div className="flex items-center gap-2">
+                <span>⚠️</span>
+                <span>{trainingError}</span>
+              </div>
+              <button onClick={() => setTrainingError(null)} className="text-rose-400 hover:text-white cursor-pointer">✕</button>
+            </div>
+          )}
+
+          {/* Results Summary Box */}
+          {trainingResult && !isTraining && (
+            <div className="mt-4 p-4 bg-slate-800/90 border border-emerald-500/40 rounded-xl relative">
+              <div className="flex items-start justify-between gap-2 mb-2.5">
+                <div className="flex items-center gap-2">
+                  <span className="text-emerald-400 text-sm">✅</span>
+                  <span className="text-xs font-bold uppercase tracking-wider text-emerald-400">
+                    Real-World Training Completed Successfully
+                  </span>
+                  <span className="text-[11px] font-mono text-slate-400">
+                    ({trainingResult.elapsed_sec}s runtime)
+                  </span>
+                </div>
+                <button
+                  onClick={() => setTrainingResult(null)}
+                  className="text-slate-400 hover:text-white text-xs px-1 cursor-pointer"
+                  title="Dismiss summary"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 gap-3 pt-2 text-xs">
+                <div className="bg-slate-900/60 p-2.5 rounded-lg border border-slate-700/50">
+                  <span className="text-slate-400 text-[10px] uppercase font-semibold">Tested Episodes</span>
+                  <p className="text-base font-extrabold text-white mt-0.5">
+                    {trainingResult.episodes_tested?.toLocaleString()}
+                  </p>
+                  <span className="text-[10px] text-slate-500">Real journeys</span>
+                </div>
+
+                <div className="bg-slate-900/60 p-2.5 rounded-lg border border-slate-700/50">
+                  <span className="text-slate-400 text-[10px] uppercase font-semibold">Error Reduction</span>
+                  <div className="flex items-center gap-1.5 mt-0.5">
+                    <span className="text-base font-extrabold text-emerald-400">
+                      -{trainingResult.error_reduction_pct}%
+                    </span>
+                  </div>
+                  <span className="text-[10px] text-slate-400">
+                    {trainingResult.initial_error_pct}% → {trainingResult.final_error_pct}%
+                  </span>
+                </div>
+
+                <div className="bg-slate-900/60 p-2.5 rounded-lg border border-slate-700/50">
+                  <span className="text-slate-400 text-[10px] uppercase font-semibold">Final Success Rate</span>
+                  <p className="text-base font-extrabold text-emerald-400 mt-0.5">
+                    {trainingResult.final_success_rate_pct}%
+                  </p>
+                  <span className="text-[10px] text-slate-400">
+                    Initial: {trainingResult.initial_success_rate_pct}%
+                  </span>
+                </div>
+
+                <div className="bg-slate-900/60 p-2.5 rounded-lg border border-slate-700/50">
+                  <span className="text-slate-400 text-[10px] uppercase font-semibold">Mean Q-Reward</span>
+                  <p className="text-base font-extrabold text-indigo-300 mt-0.5">
+                    {trainingResult.average_reward >= 0 ? `+${trainingResult.average_reward}` : trainingResult.average_reward}
+                  </p>
+                  <span className="text-[10px] text-slate-500">Scale: -1.0 to +1.0</span>
+                </div>
+
+                <div className="bg-slate-900/60 p-2.5 rounded-lg border border-slate-700/50 col-span-2 sm:col-span-1">
+                  <span className="text-slate-400 text-[10px] uppercase font-semibold">Corridors Calibrated</span>
+                  <p className="text-base font-extrabold text-cyan-300 mt-0.5">
+                    {trainingResult.policy_slots_updated} slots
+                  </p>
+                  <span className="text-[10px] text-emerald-400 font-medium">Persisted to DB</span>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
 
       {/* ── Key Performance Metrics Cards ───────────────────────────────────── */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3.5">

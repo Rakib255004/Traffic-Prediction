@@ -736,6 +736,200 @@ export async function run10HourTrainingSimulation({ corridorsCount = 50, startHo
 }
 
 /**
+ * Train and stress-test the Reinforcement Learning agent against authentic real-life
+ * ground-truth data from traffic_data.csv (211,680 records across Dhaka corridors).
+ *
+ * @param {Object} options
+ * @param {number} options.sampleCount - Number of episodes to run (e.g. 500, 1000, 2000)
+ * @param {string|null} options.corridorFilter - Optional specific corridor filter
+ */
+export async function trainWithRealLifeData({ sampleCount = 1000, corridorFilter = null } = {}) {
+  const { loadTrafficData } = await import('./trafficService.js');
+  const allRecords = loadTrafficData();
+  if (!allRecords || allRecords.length === 0) {
+    throw new Error('No ground-truth traffic data available to train against.');
+  }
+
+  let candidates = allRecords;
+  if (corridorFilter) {
+    const q = corridorFilter.toLowerCase().trim();
+    candidates = candidates.filter(r => (r.road_route_id || '').toLowerCase().includes(q));
+    if (candidates.length === 0) candidates = allRecords;
+  }
+
+  const count = Math.max(10, Math.min(5000, parseInt(sampleCount, 10) || 1000));
+  const step = Math.max(1, Math.floor(candidates.length / count));
+  const samples = [];
+  for (let i = 0; i < count; i++) {
+    samples.push(candidates[(i * step) % candidates.length]);
+  }
+
+  console.log(`[RL-Engine] Initiating Real-Life Reinforcement Training run across ${samples.length} real-world journeys...`);
+
+  const episodes = [];
+  const lr = 0.12;
+  const policyUpdatesMap = new Map();
+
+  for (let i = 0; i < samples.length; i++) {
+    const row = samples[i];
+    const cKey = normalizeCorridorKey(null, null, (row.road_route_id || '').split(':')[0].trim());
+    const hourBucket = parseInt(row.hour, 10) || 12;
+    const isWknd = row.is_weekend === 'Yes' || row.is_weekend === 1;
+    const dayType = isWknd ? 'weekend' : 'weekday';
+    const polCacheKey = `${cKey}:${hourBucket}:${dayType}`;
+
+    // 1. Fetch current policy
+    let pol = policyUpdatesMap.get(polCacheKey);
+    if (!pol) {
+      const dbPolicy = await getPolicyMultiplier(cKey, hourBucket, dayType);
+      pol = {
+        corridorKey: cKey,
+        hourBucket,
+        dayType,
+        speedMultiplier: dbPolicy.speedMultiplier || 1.0,
+        delayMultiplier: dbPolicy.delayMultiplier || 1.0,
+        qValue: dbPolicy.qValue || 0.0,
+        totalEpisodes: dbPolicy.totalEpisodes || 0,
+        successCount: dbPolicy.successCount || 0,
+        failCount: dbPolicy.failCount || 0,
+      };
+      policyUpdatesMap.set(polCacheKey, pol);
+    }
+
+    // 2. Real-life ground-truth metrics from dataset
+    const freeFlowMin = parseFloat(row.free_flow_time_min) || 15.0;
+    const actualTime = parseFloat(row.travel_time_min) || 20.0;
+    const actualSpeed = parseFloat(row.traffic_speed_kmh) || 25.0;
+    const actualLevel = row.traffic_level || 'NORMAL';
+
+    // 3. Model baseline estimate modulated by policy multipliers
+    const isRush = row.is_rush_hour === 'Yes';
+    const baseCongestionFactor = isRush ? 1.70 : (isWknd ? 1.05 : 1.25);
+    const predTime = Number(Math.max(freeFlowMin, (freeFlowMin * baseCongestionFactor * pol.delayMultiplier)).toFixed(1));
+    const predSpeed = Number(Math.max(8.0, (actualSpeed * pol.speedMultiplier)).toFixed(1));
+    const predRatio = predTime / Math.max(freeFlowMin, 1.0);
+    const predLevel = predRatio >= 2.20 ? 'SEVERE' : (predRatio >= 1.65 ? 'HEAVY' : (predRatio >= 1.25 ? 'MODERATE' : 'NORMAL'));
+
+    // 4. Calculate error & reward
+    const errorPct = Number(((Math.abs(predTime - actualTime) / Math.max(actualTime, 1.0)) * 100).toFixed(1));
+    const isExactLevel = predLevel === actualLevel;
+    const isSuccess = errorPct <= 15.0 || (isExactLevel && errorPct <= 25.0);
+    const status = isSuccess ? 'SUCCESS' : 'FAIL';
+
+    let reward = 0.0;
+    if (errorPct <= 5.0) reward = 1.0;
+    else if (errorPct <= 15.0) reward = 0.6;
+    else if (errorPct <= 25.0) reward = isExactLevel ? 0.2 : -0.2;
+    else if (errorPct <= 40.0) reward = -0.6;
+    else reward = -1.0;
+    if (isExactLevel && reward < 1.0) reward = Math.min(1.0, reward + 0.2);
+
+    // 5. Update Q-learning policy
+    const timeRatio = actualTime / Math.max(predTime, 1.0);
+    const deltaDelay = (timeRatio - 1.0) * lr;
+    pol.delayMultiplier = Number(Math.max(0.6, Math.min(2.5, pol.delayMultiplier + deltaDelay)).toFixed(4));
+    pol.speedMultiplier = Number(Math.max(0.5, Math.min(1.8, pol.speedMultiplier - deltaDelay * 0.7)).toFixed(4));
+    pol.qValue = Number((pol.qValue + lr * (reward - pol.qValue)).toFixed(3));
+    pol.totalEpisodes++;
+    if (isSuccess) pol.successCount++; else pol.failCount++;
+    pol.lastReward = reward;
+    pol.lastErrorPct = errorPct;
+
+    episodes.push({
+      id: i + 1,
+      route: row.road_route_id || cKey,
+      hour: `${String(hourBucket).padStart(2, '0')}:00 (${dayType})`,
+      predicted_time_min: predTime,
+      actual_time_min: actualTime,
+      predicted_level: predLevel,
+      actual_level: actualLevel,
+      error_pct: errorPct,
+      status,
+      reward,
+    });
+  }
+
+  // 6. Persist policy updates into PostgreSQL / in-memory cache
+  if (supabase) {
+    const policiesToUpsert = Array.from(policyUpdatesMap.values()).map(p => ({
+      corridor_key: p.corridorKey,
+      hour_bucket: p.hourBucket,
+      day_type: p.dayType,
+      speed_multiplier: p.speedMultiplier,
+      delay_multiplier: p.delayMultiplier,
+      q_value: p.qValue,
+      total_episodes: p.totalEpisodes,
+      success_count: p.successCount,
+      fail_count: p.failCount,
+      last_reward: p.lastReward,
+      last_error_pct: p.lastErrorPct,
+      updated_at: new Date().toISOString(),
+    }));
+
+    // Upsert in batches of 100
+    for (let b = 0; b < policiesToUpsert.length; b += 100) {
+      const slice = policiesToUpsert.slice(b, b + 100);
+      try {
+        await supabase.from('rl_policy_weights').upsert(slice, { onConflict: 'corridor_key,hour_bucket,day_type' });
+      } catch (e) {
+        console.warn('[RL-Engine] Batch policy upsert error:', e.message);
+      }
+    }
+
+    // Insert sample recent evaluations into the feed
+    const sampleEvaluations = episodes.slice(-25).map(e => {
+      const parts = e.route.split('->');
+      return {
+        from_location: (parts[0] || 'Origin').trim(),
+        to_location: (parts[1] || 'Destination').trim(),
+        corridor_key: normalizeCorridorKey(null, null, e.route),
+        predicted_time_min: e.predicted_time_min,
+        actual_time_min: e.actual_time_min,
+        predicted_level: e.predicted_level,
+        actual_level: e.actual_level,
+        error_pct: e.error_pct,
+        reward: e.reward,
+        status: e.status,
+        eval_due_time: new Date().toISOString(),
+        evaluated_at: new Date().toISOString(),
+      };
+    });
+    try {
+      await supabase.from('rl_prediction_evaluations').insert(sampleEvaluations);
+    } catch (e) {
+      console.warn('[RL-Engine] Sample evaluation insert error:', e.message);
+    }
+  }
+
+  // Clear policy cache so subsequent queries get updated multipliers
+  policyCache.clear();
+
+  // Metrics summary
+  const sampleWindow = Math.min(100, Math.floor(episodes.length / 5));
+  const firstBatch = episodes.slice(0, sampleWindow);
+  const lastBatch = episodes.slice(-sampleWindow);
+  const initialErrorPct = Number((firstBatch.reduce((a, e) => a + e.error_pct, 0) / firstBatch.length).toFixed(1));
+  const finalErrorPct = Number((lastBatch.reduce((a, e) => a + e.error_pct, 0) / lastBatch.length).toFixed(1));
+  const errorReductionPct = initialErrorPct > 0
+    ? Number((((initialErrorPct - finalErrorPct) / initialErrorPct) * 100).toFixed(1))
+    : 0;
+
+  const totalSuccess = episodes.filter(e => e.status === 'SUCCESS').length;
+  const overallSuccessRate = Number(((totalSuccess / episodes.length) * 100).toFixed(1));
+
+  return {
+    success: true,
+    total_episodes: episodes.length,
+    initial_error_pct: initialErrorPct,
+    final_error_pct: finalErrorPct,
+    error_reduction_pct: errorReductionPct,
+    overall_success_rate_pct: overallSuccessRate,
+    policies_updated: policyUpdatesMap.size,
+    recent_episodes: episodes.slice(-15),
+  };
+}
+
+/**
  * Get comprehensive RL metrics, success rate, and learning history
  */
 export async function getRlStatus() {
