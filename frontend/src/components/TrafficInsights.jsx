@@ -29,6 +29,268 @@ function BarChart({ data, colorMap, title }) {
   );
 }
 
+// Interactive SVG Donut / Pie Chart Component
+function DonutPieChart({
+  data,
+  title,
+  subtitle,
+  centerValue,
+  centerLabel,
+  footnote,
+  showLegend = true
+}) {
+  const [hoveredIdx, setHoveredIdx] = useState(null);
+  const total = useMemo(() => data.reduce((acc, d) => acc + (d.value || 0), 0) || 1, [data]);
+
+  const slices = useMemo(() => {
+    let cum = -Math.PI / 2;
+    return data.map((d, i) => {
+      const val = d.value || 0;
+      const angle = total > 0 ? (val / total) * 2 * Math.PI : 0;
+      if (angle <= 0.0001) {
+        return { ...d, pathData: '', pct: 0, index: i };
+      }
+      const safeAngle = Math.min(angle, 2 * Math.PI - 0.0001);
+      const startAngle = cum;
+      const endAngle = cum + safeAngle;
+      cum = endAngle;
+
+      const rOuter = 78;
+      const rInner = 48;
+      const cx = 95;
+      const cy = 95;
+
+      const x1 = cx + rOuter * Math.cos(startAngle);
+      const y1 = cy + rOuter * Math.sin(startAngle);
+      const x2 = cx + rOuter * Math.cos(endAngle);
+      const y2 = cy + rOuter * Math.sin(endAngle);
+      const x3 = cx + rInner * Math.cos(endAngle);
+      const y3 = cy + rInner * Math.sin(endAngle);
+      const x4 = cx + rInner * Math.cos(startAngle);
+      const y4 = cy + rInner * Math.sin(startAngle);
+
+      const largeArc = safeAngle > Math.PI ? 1 : 0;
+      const pathData = `M ${x1.toFixed(2)} ${y1.toFixed(2)} A ${rOuter} ${rOuter} 0 ${largeArc} 1 ${x2.toFixed(2)} ${y2.toFixed(2)} L ${x3.toFixed(2)} ${y3.toFixed(2)} A ${rInner} ${rInner} 0 ${largeArc} 0 ${x4.toFixed(2)} ${y4.toFixed(2)} Z`;
+      const pct = Math.round((val / total) * 100);
+
+      return {
+        ...d,
+        pathData,
+        pct,
+        index: i,
+      };
+    });
+  }, [data, total]);
+
+  const activeItem = hoveredIdx !== null ? slices[hoveredIdx] : null;
+
+  return (
+    <div className="bg-white rounded-2xl border border-slate-200 p-5 flex flex-col justify-between shadow-2xs">
+      <div>
+        <div className="flex items-start justify-between gap-2 mb-3">
+          <div>
+            <h3 className="text-sm font-bold text-slate-800">{title}</h3>
+            {subtitle && <p className="text-xs text-slate-400 mt-0.5">{subtitle}</p>}
+          </div>
+          {footnote && (
+            <span className="text-[10px] font-semibold text-blue-700 bg-blue-50 border border-blue-100 px-2 py-0.5 rounded-full shrink-0">
+              {footnote}
+            </span>
+          )}
+        </div>
+
+        <div className="flex flex-col sm:flex-row items-center justify-center gap-5 my-2">
+          {/* SVG Donut */}
+          <div className="relative w-44 h-44 shrink-0 flex items-center justify-center">
+            <svg viewBox="0 0 190 190" className="w-full h-full transform -rotate-90">
+              {slices.map((slice) => {
+                if (!slice.pathData) return null;
+                const isHovered = hoveredIdx === slice.index;
+                return (
+                  <path
+                    key={slice.label}
+                    d={slice.pathData}
+                    fill={slice.color}
+                    className="transition-all duration-200 cursor-pointer"
+                    style={{
+                      opacity: hoveredIdx === null || isHovered ? 1 : 0.45,
+                      filter: isHovered ? 'drop-shadow(0px 2px 6px rgba(0,0,0,0.25))' : 'none',
+                      transform: isHovered ? 'scale(1.03)' : 'scale(1)',
+                      transformOrigin: '95px 95px',
+                    }}
+                    onMouseEnter={() => setHoveredIdx(slice.index)}
+                    onMouseLeave={() => setHoveredIdx(null)}
+                  />
+                );
+              })}
+            </svg>
+            {/* Center Summary Label */}
+            <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none text-center px-4">
+              <span className="text-base font-extrabold text-slate-800 leading-tight">
+                {activeItem ? `${activeItem.pct}%` : centerValue}
+              </span>
+              <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mt-0.5 line-clamp-1">
+                {activeItem ? activeItem.label : centerLabel}
+              </span>
+            </div>
+          </div>
+
+          {/* Side Legend */}
+          {showLegend && (
+            <div className="flex-1 w-full space-y-2">
+              {slices.map((slice) => {
+                const isHovered = hoveredIdx === slice.index;
+                return (
+                  <div
+                    key={slice.label}
+                    onMouseEnter={() => setHoveredIdx(slice.index)}
+                    onMouseLeave={() => setHoveredIdx(null)}
+                    className={`flex items-center justify-between p-1.5 rounded-xl transition-colors cursor-pointer ${
+                      isHovered ? 'bg-slate-50' : 'hover:bg-slate-50/60'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span
+                        className="w-3 h-3 rounded-full shrink-0"
+                        style={{ backgroundColor: slice.color }}
+                      />
+                      <div className="min-w-0">
+                        <div className="text-xs font-semibold text-slate-700 truncate">
+                          {slice.label}
+                        </div>
+                        {slice.detail && (
+                          <div className="text-[10px] text-slate-400 truncate">
+                            {slice.detail}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    <div className="text-right shrink-0 pl-2">
+                      <div className="text-xs font-bold text-slate-800">
+                        {slice.pct}%
+                      </div>
+                      <div className="text-[10px] text-slate-400">
+                        {slice.value ? slice.value.toLocaleString() : 0}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Weekly Day-of-Week Profile Component
+function WeeklyDayProfileChart({ data }) {
+  const maxSpeed = 48;
+  return (
+    <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-2xs space-y-3">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+        <div>
+          <h3 className="text-sm font-bold text-slate-800">Weekly Congestion & Velocity Profile</h3>
+          <p className="text-xs text-slate-400 mt-0.5">Average velocity and congestion rate across 7 days (BD Weekend: Fri & Sat)</p>
+        </div>
+        <span className="text-[11px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full self-start sm:self-auto">
+          Friday/Saturday Free-Flow Surge
+        </span>
+      </div>
+
+      <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2.5 pt-2">
+        {data.map((d) => (
+          <div
+            key={d.day}
+            className={`flex flex-col justify-between p-3 rounded-xl border transition ${
+              d.isWeekend
+                ? 'bg-emerald-50/40 border-emerald-200 hover:bg-emerald-50/80'
+                : 'bg-slate-50/50 border-slate-200 hover:bg-slate-100/70'
+            }`}
+          >
+            <div>
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-slate-800">{d.day.slice(0, 3)}</span>
+                <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                  d.isWeekend
+                    ? 'bg-emerald-100 text-emerald-800'
+                    : 'bg-slate-200 text-slate-600'
+                }`}>
+                  {d.isWeekend ? 'Weekend' : 'Workday'}
+                </span>
+              </div>
+              <div className="mt-3">
+                <div className="text-lg font-black text-slate-800 leading-none">
+                  {d.avgSpeed} <span className="text-xs font-medium text-slate-500">km/h</span>
+                </div>
+                <div className="text-[11px] text-slate-400 font-medium mt-1">Average speed</div>
+              </div>
+            </div>
+
+            <div className="mt-3 space-y-1.5">
+              <div className="w-full bg-slate-200/80 rounded-full h-1.5 overflow-hidden">
+                <div
+                  className={`h-full rounded-full transition-all duration-300 ${
+                    d.isWeekend ? 'bg-emerald-500' : d.congestionPct > 35 ? 'bg-orange-500' : 'bg-amber-400'
+                  }`}
+                  style={{ width: `${Math.min(100, (d.avgSpeed / maxSpeed) * 100)}%` }}
+                />
+              </div>
+              <div className="flex items-center justify-between text-[10px] font-semibold">
+                <span className="text-slate-400">Congestion:</span>
+                <span className={d.congestionPct > 35 ? 'text-orange-600' : d.congestionPct > 20 ? 'text-amber-600' : 'text-emerald-600'}>
+                  {d.congestionPct}%
+                </span>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// Road Network Hierarchy & Performance Component
+function RoadHierarchyCard({ data }) {
+  return (
+    <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-2xs space-y-3">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+        <div>
+          <h3 className="text-sm font-bold text-slate-800">Road Network Hierarchy & Performance</h3>
+          <p className="text-xs text-slate-400 mt-0.5">Speed velocity and corridor distribution across road classes in Dhaka</p>
+        </div>
+        <span className="text-[11px] font-semibold text-indigo-700 bg-indigo-50 border border-indigo-100 px-2.5 py-0.5 rounded-full self-start sm:self-auto">
+          3 Physical Road Classes
+        </span>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-1">
+        {data.map((r) => (
+          <div key={r.road_type} className="p-3.5 rounded-xl border border-slate-100 bg-slate-50/50 flex flex-col justify-between">
+            <div>
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-slate-800 truncate" title={r.road_type}>{r.road_type}</span>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-white border border-slate-200 text-slate-600">
+                  {r.pct}% share
+                </span>
+              </div>
+              <div className="mt-2 text-xl font-black text-slate-800 leading-none">
+                {r.avgSpeed} <span className="text-xs font-medium text-slate-500">km/h</span>
+              </div>
+              <p className="text-[11px] text-slate-400 mt-1 line-clamp-2">{r.desc}</p>
+            </div>
+            <div className="mt-3 pt-2 border-t border-slate-200/60 flex items-center justify-between text-[11px]">
+              <span className="text-slate-500">{r.count.toLocaleString()} snapshots</span>
+              <span className="font-semibold text-slate-700">{r.lanes}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // Full interactive corridor list showing all routes from most data to least
 function RouteRecordsList({ routes }) {
   const [filter, setFilter] = useState('ALL');
@@ -368,6 +630,33 @@ export default function TrafficInsights() {
 
     // Traffic level distribution (4 canonical classes: Normal | Moderate | Heavy | Severe)
     const levelCounts = { NORMAL: 0, MODERATE: 0, HEAVY: 0, SEVERE: 0 };
+
+    // Weather Distribution & Speed Impact
+    const weatherBuckets = {
+      Clear:  { count: 0, speeds: [] },
+      Cloudy: { count: 0, speeds: [] },
+      Rain:   { count: 0, speeds: [] },
+      Fog:    { count: 0, speeds: [] },
+    };
+
+    // Day of Week Distribution
+    const dayBuckets = {
+      Friday:    { count: 0, congested: 0, speeds: [] },
+      Saturday:  { count: 0, congested: 0, speeds: [] },
+      Sunday:    { count: 0, congested: 0, speeds: [] },
+      Monday:    { count: 0, congested: 0, speeds: [] },
+      Tuesday:   { count: 0, congested: 0, speeds: [] },
+      Wednesday: { count: 0, congested: 0, speeds: [] },
+      Thursday:  { count: 0, congested: 0, speeds: [] },
+    };
+
+    // Road Type Performance
+    const roadTypeBuckets = {
+      'Expressway':       { count: 0, speeds: [] },
+      'Highway/Arterial': { count: 0, speeds: [] },
+      'Primary Arterial': { count: 0, speeds: [] },
+    };
+
     records.forEach(r => {
       const lvl = (r.traffic_level || '').toUpperCase();
       if (lvl === 'NORMAL')      levelCounts.NORMAL++;
@@ -458,6 +747,50 @@ export default function TrafficInsights() {
         b.congested++;
       } else {
         b.normal++;
+      }
+
+      // Weather distribution & speed
+      const wRaw = String(r.weather || 'Clear').trim();
+      const wKey = wRaw.includes('Rain') || wRaw.includes('Drizzle') ? 'Rain' :
+                   wRaw.includes('Cloud') ? 'Cloudy' :
+                   wRaw.includes('Fog') || wRaw.includes('Mist') ? 'Fog' : 'Clear';
+      if (!weatherBuckets[wKey]) weatherBuckets[wKey] = { count: 0, speeds: [] };
+      weatherBuckets[wKey].count++;
+      if (!isNaN(spd)) weatherBuckets[wKey].speeds.push(spd);
+
+      // Day of Week distribution
+      let dayName = r.day_of_week;
+      if (!dayName && r.timestamp) {
+        const dObj = new Date(String(r.timestamp).replace(' ', 'T'));
+        if (!isNaN(dObj.getTime())) {
+          dayName = dObj.toLocaleDateString('en-US', { weekday: 'long' });
+        }
+      }
+      if (dayName && dayBuckets[dayName]) {
+        dayBuckets[dayName].count++;
+        if (!isNaN(spd)) dayBuckets[dayName].speeds.push(spd);
+        if (lvl === 'SEVERE' || lvl === 'HEAVY' || lvl === 'MODERATE' || lvl === 'SLOW' || lvl === 'TRAFFIC_JAM') {
+          dayBuckets[dayName].congested++;
+        }
+      }
+
+      // Road Type distribution & performance
+      let rt = r.road_type;
+      if (!rt) {
+        const idLower = String(r.road_route_id || '').toLowerCase();
+        if (idLower.includes('flyover') || idLower.includes('elevated') || idLower.includes('expressway')) {
+          rt = 'Expressway';
+        } else if (idLower.includes('savar') || idLower.includes('nabinagar') || idLower.includes('gazipur') || idLower.includes('highway')) {
+          rt = 'Highway/Arterial';
+        } else {
+          rt = 'Primary Arterial';
+        }
+      }
+      const rtKey = rt.includes('Expressway') ? 'Expressway' :
+                    rt.includes('Highway') ? 'Highway/Arterial' : 'Primary Arterial';
+      if (roadTypeBuckets[rtKey]) {
+        roadTypeBuckets[rtKey].count++;
+        if (!isNaN(spd)) roadTypeBuckets[rtKey].speeds.push(spd);
       }
     });
 
@@ -601,8 +934,83 @@ export default function TrafficInsights() {
       ? `${timestamps[0].split(' ')[0]} to ${timestamps[timestamps.length - 1].split(' ')[0]}`
       : 'N/A';
 
+    // 1. Traffic Level Donut Distribution
+    const totalLevelCount = Object.values(levelCounts).reduce((a, b) => a + b, 0) || 1;
+    const normalPct = Math.round((levelCounts.NORMAL / totalLevelCount) * 100);
+    const donutTrafficLevel = [
+      { label: 'Normal',   value: levelCounts.NORMAL,   color: '#10b981', detail: '< 1.25 CR · Free Flow' },
+      { label: 'Moderate', value: levelCounts.MODERATE, color: '#f59e0b', detail: '1.25–1.64 CR · Slowdown' },
+      { label: 'Heavy',    value: levelCounts.HEAVY,    color: '#f97316', detail: '1.65–2.19 CR · High Queue' },
+      { label: 'Severe',   value: levelCounts.SEVERE,   color: '#ef4444', detail: '≥ 2.20 CR · Gridlock' },
+    ];
+
+    // 2. Weather Donut & Velocity Impact
+    const weatherColors = {
+      'Clear':  '#38bdf8',
+      'Cloudy': '#94a3b8',
+      'Rain':   '#06b6d4',
+      'Fog':    '#a855f7',
+    };
+    const donutWeather = Object.entries(weatherBuckets).map(([w, bData]) => {
+      const avg = bData.speeds.length ? Number((bData.speeds.reduce((a, b) => a + b, 0) / bData.speeds.length).toFixed(1)) : 28.0;
+      return {
+        label: w,
+        value: bData.count,
+        color: weatherColors[w] || '#3b82f6',
+        detail: `${avg} km/h avg speed`,
+        avgSpeed: avg
+      };
+    });
+
+    // 3. Weekly Day Profile
+    const dayOrder = ['Friday', 'Saturday', 'Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday'];
+    const weeklyProfile = dayOrder.map(day => {
+      const b = dayBuckets[day];
+      const avgSpd = b.speeds.length ? Number((b.speeds.reduce((a, b) => a + b, 0) / b.speeds.length).toFixed(1)) : 28.0;
+      const congestionPct = b.count > 0 ? Math.round((b.congested / b.count) * 100) : 0;
+      const isWeekend = day === 'Friday' || day === 'Saturday';
+      return {
+        day,
+        isWeekend,
+        avgSpeed: avgSpd,
+        congestionPct,
+        count: b.count,
+      };
+    });
+
+    // 4. Road Hierarchy Performance
+    const roadDescs = {
+      'Expressway': 'Elevated bypasses & grade-separated expressways (6–8 lanes)',
+      'Highway/Arterial': 'Radial highways & suburban connecting corridors (4 lanes)',
+      'Primary Arterial': 'Dense central commercial & administrative avenues (4 lanes)',
+    };
+    const roadColors = {
+      'Expressway': '#6366f1',
+      'Highway/Arterial': '#0ea5e9',
+      'Primary Arterial': '#f43f5e',
+    };
+    const totalRoads = Object.values(roadTypeBuckets).reduce((a, b) => a + b.count, 0) || 1;
+    const roadHierarchy = Object.entries(roadTypeBuckets).map(([rt, b]) => {
+      const avgSpd = b.speeds.length ? Number((b.speeds.reduce((a, b) => a + b, 0) / b.speeds.length).toFixed(1)) : 28.0;
+      const pct = Math.round((b.count / totalRoads) * 100);
+      return {
+        road_type: rt,
+        count: b.count,
+        pct,
+        avgSpeed: avgSpd,
+        desc: roadDescs[rt] || '',
+        color: roadColors[rt] || '#3b82f6',
+        lanes: rt === 'Expressway' ? '6–8 Lanes' : '4 Lanes',
+      };
+    });
+
     return {
       levelDisplay,
+      donutTrafficLevel,
+      normalPct,
+      donutWeather,
+      weeklyProfile,
+      roadHierarchy,
       hourData,
       peakHours,
       peakHoursByRate,
@@ -740,19 +1148,34 @@ export default function TrafficInsights() {
         ))}
       </div>
 
-      {/* Traffic level distribution */}
-      <div className="bg-white rounded-2xl border border-slate-200 p-6">
-        <BarChart
-          title="Traffic Level Distribution"
-          data={stats.levelDisplay}
-          colorMap={{
-            'Normal':   '#10b981',
-            'Moderate': '#f59e0b',
-            'Heavy':    '#f97316',
-            'Severe':   '#ef4444',
-          }}
+      {/* Interactive Pie Charts & Distribution Grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Graph 1: Traffic Severity Split (Donut/Pie Chart) */}
+        <DonutPieChart
+          title="Traffic Severity Distribution"
+          subtitle="Proportional split of all snapshots across 4 canonical tiers"
+          centerValue={`${stats.normalPct}%`}
+          centerLabel="Free Flow"
+          footnote="4 Flow Classes"
+          data={stats.donutTrafficLevel}
+        />
+
+        {/* Graph 2: Weather Distribution & Velocity Impact (Donut/Pie Chart) */}
+        <DonutPieChart
+          title="Weather Distribution & Velocity Impact"
+          subtitle="Atmospheric condition share & resulting average speed"
+          centerValue={`${stats.avgSpeed} km/h`}
+          centerLabel="Network Avg"
+          footnote="Climate Telemetry"
+          data={stats.donutWeather}
         />
       </div>
+
+      {/* Graph 3: Weekly Congestion & Velocity Profile (7 Days BD Profile) */}
+      <WeeklyDayProfileChart data={stats.weeklyProfile} />
+
+      {/* Graph 4: Road Network Hierarchy & Velocity Comparison */}
+      <RoadHierarchyCard data={stats.roadHierarchy} />
 
       {/* Congestion by hour */}
       <div className="bg-white rounded-2xl border border-slate-200 p-6">

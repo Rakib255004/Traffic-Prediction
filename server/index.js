@@ -218,6 +218,10 @@ app.get('/api/history', (req, res) => {
         traffic_speed_kmh: r.traffic_speed_kmh,
         traffic_delay_min: r.traffic_delay_min,
         road_route_id: r.road_route_id,
+        weather: r.weather || 'Clear',
+        road_type: r.road_type || 'Primary Arterial',
+        day_of_week: r.day_of_week || '',
+        congestion_ratio: r.congestion_ratio || 1.0,
       }));
     }
 

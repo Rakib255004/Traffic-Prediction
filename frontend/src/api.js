@@ -228,6 +228,8 @@ export async function fetchHistory(params = {}) {
 
   // Generate realistic representative history for Traffic Insights charts
   const levels = ['NORMAL', 'NORMAL', 'MODERATE', 'NORMAL', 'HEAVY', 'NORMAL', 'MODERATE'];
+  const weathers = ['Clear', 'Clear', 'Cloudy', 'Clear', 'Rain', 'Cloudy', 'Fog'];
+  const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
   const routes = generateFallbackRoutes();
   const records = [];
   const hours = [7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22];
@@ -235,13 +237,20 @@ export async function fetchHistory(params = {}) {
   for (let i = 0; i < 400; i++) {
     const r = routes[i % routes.length];
     const hour = hours[i % hours.length];
+    const day = days[i % days.length];
+    const weather = weathers[i % weathers.length];
     const isPeak = (hour >= 8 && hour <= 10) || (hour >= 17 && hour <= 20);
     const lvl = isPeak ? (i % 3 === 0 ? 'HEAVY' : 'MODERATE') : levels[i % levels.length];
+    const isExpressway = (r.route_name || r.route_id || '').toLowerCase().includes('flyover') || (r.route_name || r.route_id || '').toLowerCase().includes('elevated');
+    const roadType = isExpressway ? 'Expressway' : (r.road_length_km > 15 ? 'Highway/Arterial' : 'Primary Arterial');
     records.push({
       road_route_id: r.route_id,
       hour: String(hour),
       traffic_level: lvl,
       traffic_speed_kmh: lvl === 'HEAVY' ? 12 : lvl === 'MODERATE' ? 20 : 34,
+      weather,
+      day_of_week: day,
+      road_type: roadType,
       timestamp: `2026-11-10 ${String(hour).padStart(2, '0')}:${String((i * 7) % 60).padStart(2, '0')}`
     });
   }
