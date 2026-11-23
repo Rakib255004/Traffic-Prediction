@@ -757,18 +757,59 @@ export async function trainWithRealLifeData({ sampleCount = 1000, corridorFilter
     if (candidates.length === 0) candidates = allRecords;
   }
 
-  const count = Math.max(10, Math.min(5000, parseInt(sampleCount, 10) || 1000));
-  const step = Math.max(1, Math.floor(candidates.length / count));
-  const samples = [];
-  for (let i = 0; i < count; i++) {
-    samples.push(candidates[(i * step) % candidates.length]);
+  // Pre-fetch all existing policy weights from Supabase in ONE query to avoid inner-loop network latency
+  const existingWeightsMap = new Map();
+  if (supabase) {
+    try {
+      const { data: dbWeights, error } = await supabase.from('rl_policy_weights').select('*');
+      if (!error && Array.isArray(dbWeights)) {
+        for (const p of dbWeights) {
+          const key = `${p.corridor_key}:${p.hour_bucket}:${p.day_type}`;
+          existingWeightsMap.set(key, p);
+        }
+      }
+    } catch (e) {
+      console.warn('[RL-Engine] Pre-fetch policy warning (using default weights):', e.message);
+    }
   }
 
-  console.log(`[RL-Engine] Initiating Real-Life Reinforcement Training run across ${samples.length} real-world journeys...`);
+  // Group candidate records by route_id so EVERY single route is predicted and evaluated
+  const routeGroups = new Map();
+  for (const r of candidates) {
+    const rId = r.road_route_id || 'UNKNOWN';
+    if (!routeGroups.has(rId)) routeGroups.set(rId, []);
+    routeGroups.get(rId).push(r);
+  }
+
+  const allRouteIds = Array.from(routeGroups.keys());
+  const count = Math.max(10, Math.min(5000, parseInt(sampleCount, 10) || 1000));
+  const samples = [];
+  const perRouteCount = Math.max(1, Math.floor(count / allRouteIds.length));
+
+  // Balanced round-robin sampling across all routes and diverse time periods
+  for (let pass = 0; pass < perRouteCount; pass++) {
+    for (const rId of allRouteIds) {
+      const list = routeGroups.get(rId);
+      const idx = Math.floor((pass * list.length) / perRouteCount) % list.length;
+      samples.push(list[idx]);
+    }
+  }
+
+  // Fill remainder to reach requested count
+  let remainder = 0;
+  while (samples.length < count && allRouteIds.length > 0) {
+    const rId = allRouteIds[remainder % allRouteIds.length];
+    const list = routeGroups.get(rId);
+    samples.push(list[remainder % list.length]);
+    remainder++;
+  }
+
+  console.log(`[RL-Engine] Initiating Real-Life Reinforcement Training across ${samples.length} journeys covering all ${allRouteIds.length} routes...`);
 
   const episodes = [];
   const lr = 0.12;
   const policyUpdatesMap = new Map();
+  const routeStatsMap = new Map();
 
   for (let i = 0; i < samples.length; i++) {
     const row = samples[i];
@@ -778,20 +819,20 @@ export async function trainWithRealLifeData({ sampleCount = 1000, corridorFilter
     const dayType = isWknd ? 'weekend' : 'weekday';
     const polCacheKey = `${cKey}:${hourBucket}:${dayType}`;
 
-    // 1. Fetch current policy
+    // 1. Fetch current policy from memory
     let pol = policyUpdatesMap.get(polCacheKey);
     if (!pol) {
-      const dbPolicy = await getPolicyMultiplier(cKey, hourBucket, dayType);
+      const cached = existingWeightsMap.get(polCacheKey);
       pol = {
         corridorKey: cKey,
         hourBucket,
         dayType,
-        speedMultiplier: dbPolicy.speedMultiplier || 1.0,
-        delayMultiplier: dbPolicy.delayMultiplier || 1.0,
-        qValue: dbPolicy.qValue || 0.0,
-        totalEpisodes: dbPolicy.totalEpisodes || 0,
-        successCount: dbPolicy.successCount || 0,
-        failCount: dbPolicy.failCount || 0,
+        speedMultiplier: cached?.speed_multiplier ?? 1.0,
+        delayMultiplier: cached?.delay_multiplier ?? 1.0,
+        qValue: cached?.q_value ?? 0.0,
+        totalEpisodes: cached?.total_episodes ?? 0,
+        successCount: cached?.success_count ?? 0,
+        failCount: cached?.fail_count ?? 0,
       };
       policyUpdatesMap.set(polCacheKey, pol);
     }
@@ -835,9 +876,30 @@ export async function trainWithRealLifeData({ sampleCount = 1000, corridorFilter
     pol.lastReward = reward;
     pol.lastErrorPct = errorPct;
 
+    // Track per-route statistics so every route's individual performance is available
+    const routeName = row.road_route_id || cKey;
+    if (!routeStatsMap.has(routeName)) {
+      routeStatsMap.set(routeName, {
+        route_id: routeName,
+        count: 0,
+        successCount: 0,
+        totalError: 0,
+        lastSpeedMult: pol.speedMultiplier,
+        lastDelayMult: pol.delayMultiplier,
+        lastQValue: pol.qValue,
+      });
+    }
+    const rStat = routeStatsMap.get(routeName);
+    rStat.count++;
+    if (isSuccess) rStat.successCount++;
+    rStat.totalError += errorPct;
+    rStat.lastSpeedMult = pol.speedMultiplier;
+    rStat.lastDelayMult = pol.delayMultiplier;
+    rStat.lastQValue = pol.qValue;
+
     episodes.push({
       id: i + 1,
-      route: row.road_route_id || cKey,
+      route: routeName,
       hour: `${String(hourBucket).padStart(2, '0')}:00 (${dayType})`,
       predicted_time_min: predTime,
       actual_time_min: actualTime,
@@ -917,15 +979,45 @@ export async function trainWithRealLifeData({ sampleCount = 1000, corridorFilter
   const totalSuccess = episodes.filter(e => e.status === 'SUCCESS').length;
   const overallSuccessRate = Number(((totalSuccess / episodes.length) * 100).toFixed(1));
 
+  // Build clean route breakdown array covering each route to each destination
+  const routeBreakdown = Array.from(routeStatsMap.values()).map(s => {
+    const parts = (s.route_id || '').split(/[:->]+/).map(x => x.trim()).filter(Boolean);
+    const codeMatch = s.route_id.match(/^R\d{2}/i);
+    const code = codeMatch ? codeMatch[0].toUpperCase() : 'R--';
+    const fromLoc = parts.length >= 3 ? parts[1] : (parts[0] || 'Origin');
+    const toLoc = parts.length >= 3 ? parts[2] : (parts[1] || 'Destination');
+    const avgErr = Number((s.totalError / Math.max(1, s.count)).toFixed(1));
+    const succPct = Number(((s.successCount / Math.max(1, s.count)) * 100).toFixed(1));
+    return {
+      route_id: s.route_id,
+      code,
+      from: fromLoc,
+      to: toLoc,
+      episodes: s.count,
+      avg_error_pct: avgErr,
+      success_rate_pct: succPct,
+      speed_multiplier: Number(s.lastSpeedMult.toFixed(2)),
+      delay_multiplier: Number(s.lastDelayMult.toFixed(2)),
+      q_value: Number(s.lastQValue.toFixed(2)),
+    };
+  }).sort((a, b) => a.code.localeCompare(b.code));
+
   return {
     success: true,
     total_episodes: episodes.length,
+    episodes_tested: episodes.length,
     initial_error_pct: initialErrorPct,
     final_error_pct: finalErrorPct,
     error_reduction_pct: errorReductionPct,
+    initial_success_rate_pct: Number(((firstBatch.filter(e => e.status === 'SUCCESS').length / firstBatch.length) * 100).toFixed(1)),
+    final_success_rate_pct: overallSuccessRate,
     overall_success_rate_pct: overallSuccessRate,
-    policies_updated: policyUpdatesMap.size,
-    recent_episodes: episodes.slice(-15),
+    average_reward: Number((episodes.reduce((sum, e) => sum + e.reward, 0) / episodes.length).toFixed(2)),
+    policy_slots_updated: policyUpdatesMap.size,
+    routes_covered: routeStatsMap.size,
+    total_routes_in_network: allRouteIds.length,
+    recent_episodes: episodes.slice(-25),
+    route_breakdown: routeBreakdown,
   };
 }
 

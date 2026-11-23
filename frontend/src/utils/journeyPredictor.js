@@ -33,8 +33,9 @@ export function haversineKm(c1, c2) {
 // Build adjacency graph for Dhaka road network
 function buildNetworkGraph() {
   const graph = {};
+  const sourceRoutes = (ALL_ROUTES && ALL_ROUTES.length > 0) ? ALL_ROUTES : OFFICIAL_ROUTES;
 
-  OFFICIAL_ROUTES.forEach(r => {
+  sourceRoutes.forEach(r => {
     const parts = r.route_path.split('->').map(p => p.trim());
     for (let i = 0; i < parts.length - 1; i++) {
       const u = parts[i];
