@@ -605,7 +605,7 @@ export async function evaluateRlNow(currentPrediction = null, limit = 5) {
     const res = await fetchWithTimeout(`${API_BASE}/rl/evaluate-now`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ currentPrediction, limit })
+      body: JSON.stringify({ currentPrediction, prediction: currentPrediction, limit, force: true })
     });
     if (res.ok) {
       const json = await res.json();
@@ -616,6 +616,8 @@ export async function evaluateRlNow(currentPrediction = null, limit = 5) {
   }
   return null;
 }
+
+export const triggerRlImmediateEvaluation = evaluateRlNow;
 
 export async function run10HourSimulationApi(params = {}) {
   try {
