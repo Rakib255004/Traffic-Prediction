@@ -11,7 +11,7 @@ export const API_BASE = (typeof window !== 'undefined' && (window.location.hostn
   : (import.meta.env.VITE_API_URL || 'https://traffic-prediction-q1yl.onrender.com/api');
 
 // Maximum time to wait for backend before falling back to local dataset (allows Render cloud cold-start)
-export const FETCH_TIMEOUT_MS = 15000;
+export const FETCH_TIMEOUT_MS = 20000; // Increased to 20s to survive Render cold-start wake-up
 
 export async function fetchWithTimeout(url, options = {}, timeoutMs = FETCH_TIMEOUT_MS) {
   const controller = new AbortController();
@@ -23,6 +23,20 @@ export async function fetchWithTimeout(url, options = {}, timeoutMs = FETCH_TIME
     });
   } finally {
     clearTimeout(id);
+  }
+}
+
+// ── Render Keep-Alive: Warm up the backend as soon as the app loads ─────────────
+// Sends a lightweight GET to /api/health on first page load so Render wakes up
+// before the user clicks any button. Silent — no errors shown to the user.
+let _backendWarmedUp = false;
+export function warmUpBackend() {
+  if (_backendWarmedUp) return;
+  _backendWarmedUp = true;
+  if (typeof window !== 'undefined' && !window.location.hostname.startsWith('localhost')) {
+    fetch(`${API_BASE}/health`, { method: 'GET', cache: 'no-store' })
+      .then(r => { if (r.ok) console.log('[API] Backend warmed up ✓'); })
+      .catch(() => {}); // silent — backend might still be waking
   }
 }
 
@@ -382,20 +396,28 @@ export async function fetchEngineStatus() {
 }
 
 export async function predictJourneyApi(payload) {
-  try {
-    const res = await fetchWithTimeout(`${API_BASE}/predict-journey`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
-    if (res.ok) {
-      const json = await res.json();
-      if (json && json.success) {
-        return json.data;
+  // Try backend up to 2 times (once immediately, once after 5s delay for Render cold-start)
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const res = await fetchWithTimeout(`${API_BASE}/predict-journey`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      }, attempt === 0 ? 20000 : 25000); // 20s first try, 25s on retry
+      if (res.ok) {
+        const json = await res.json();
+        if (json && json.success) {
+          return json.data;
+        }
+      }
+    } catch (err) {
+      if (attempt === 0) {
+        console.warn('[API] /api/predict-journey cold-start delay, retrying in 5s...', err.message);
+        await new Promise(r => setTimeout(r, 5000)); // Wait for Render to wake up
+      } else {
+        console.warn('[API] /api/predict-journey unavailable after retry, utilizing client-side prediction engine:', err.message);
       }
     }
-  } catch (err) {
-    console.warn('[API] /api/predict-journey unavailable, utilizing client-side prediction engine:', err.message);
   }
 
   // Fallback to local client-side prediction engine

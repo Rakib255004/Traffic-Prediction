@@ -769,6 +769,33 @@ const server = app.listen(PORT, HOST, () => {
   startRlBackgroundWorker(3 * 60 * 1000);
   // Start OSRM continuous road data collector (autonomous, every 5 minutes)
   startOsrmContinuousCollector(5 * 60 * 1000);
+
+  // ── Render Free Tier Keep-Alive: Self-ping every 14 minutes to prevent cold-start sleep ──
+  // Render.com free services sleep after 15 minutes of inactivity.
+  // This internal self-ping ensures the process stays warm 24/7 at zero extra cost.
+  if (process.env.NODE_ENV === 'production') {
+    const RENDER_PUBLIC_URL = process.env.RENDER_EXTERNAL_URL || 'https://traffic-prediction-q1yl.onrender.com';
+    const PING_INTERVAL_MS = 14 * 60 * 1000; // 14 minutes
+    const selfPing = async () => {
+      try {
+        const { default: https } = await import('https');
+        https.get(`${RENDER_PUBLIC_URL}/api/health`, (res) => {
+          console.log(`[KeepAlive] Self-ping → ${res.statusCode}`);
+          res.resume(); // consume the response body
+        }).on('error', (err) => {
+          console.warn('[KeepAlive] Self-ping failed:', err.message);
+        });
+      } catch (err) {
+        console.warn('[KeepAlive] Self-ping error:', err.message);
+      }
+    };
+    // First ping after 1 minute, then every 14 minutes
+    setTimeout(() => {
+      selfPing();
+      setInterval(selfPing, PING_INTERVAL_MS);
+    }, 60 * 1000);
+    console.log('[KeepAlive] Render keep-alive daemon started (ping every 14 min)');
+  }
 });
 
 // Graceful shutdown
