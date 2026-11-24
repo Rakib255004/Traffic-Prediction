@@ -110,8 +110,10 @@ const haversineKm = (a, b) => {
   return R * 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x));
 };
 
-const hasStraightJump = (coords, maxGapKm = 0.5) => {
-  if (!Array.isArray(coords) || coords.length < 10) return true;
+const hasStraightJump = (coords, maxGapKm = 0.08) => {
+  // Lowered default threshold: 0.08 km (~80 m) catches angular/jagged backend geometry
+  // that isn't a true "straight line" but is still not following real road curves.
+  if (!Array.isArray(coords) || coords.length < 20) return true;
   for (let i = 1; i < coords.length; i++) {
     if (haversineKm(coords[i - 1], coords[i]) > maxGapKm) return true;
   }
@@ -204,9 +206,12 @@ export default function JourneyRouteMap({
     const origCoords = primaryRoute?.origin_coords || NODE_COORDINATES[fromLocation] || [23.8069, 90.3687];
     const destCoords = primaryRoute?.dest_coords || NODE_COORDINATES[toLocation] || [23.7570, 90.3888];
 
-    // Primary route check
+    // Primary route check — force client OSRM refinement when:
+    // 1. No road coords at all, or fewer than 20 points (waypoint-only response from backend)
+    // 2. Any two consecutive points are more than 80m apart (angular/jagged geometry)
     const primCoords = primaryRoute?.road_coords;
-    if (primCoords && hasStraightJump(primCoords, 0.5) && !refinedRequestedRef.current.has('primary')) {
+    const primNeedsRefinement = !primCoords || primCoords.length < 20 || hasStraightJump(primCoords, 0.08);
+    if (primNeedsRefinement && !refinedRequestedRef.current.has('primary')) {
       refinedRequestedRef.current.add('primary');
       const cps = (primaryRoute?.checkpoints || []).map(c => c.coords).filter(Boolean);
       const wps = [origCoords, ...cps, destCoords];
@@ -224,7 +229,7 @@ export default function JourneyRouteMap({
     resolvedAlts.forEach((alt, idx) => {
       const key = alt.id || `alt-${idx}`;
       const altCoords = alt.road_coords;
-      if ((!altCoords || hasStraightJump(altCoords, 0.5)) && !refinedRequestedRef.current.has(key)) {
+      if ((!altCoords || altCoords.length < 20 || hasStraightJump(altCoords, 0.08)) && !refinedRequestedRef.current.has(key)) {
         refinedRequestedRef.current.add(key);
         const altWps = alt.waypoints || (alt.coords ? [origCoords, alt.coords, destCoords] : [origCoords, destCoords]);
         fetchClientRoadCurve(altWps).then(curve => {
@@ -417,12 +422,12 @@ export default function JourneyRouteMap({
       const refined = refinedRoadMap[key];
       const rawPts = (refined && refined.length >= 8)
         ? refined
-        : (alt.road_coords?.length >= 10 && !hasStraightJump(alt.road_coords, 0.6))
+        : (alt.road_coords?.length >= 20 && !hasStraightJump(alt.road_coords, 0.08))
         ? alt.road_coords
         : (alt.coords ? [origCoords, alt.coords, destCoords] : [origCoords, destCoords]);
 
       // If coordinates still have straight line cuts across blocks before OSRM responds, do not draw straight line
-      if (hasStraightJump(rawPts, 0.7) && !refined) {
+      if (hasStraightJump(rawPts, 0.08) && !refined) {
         return;
       }
 
