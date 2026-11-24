@@ -681,7 +681,7 @@ async function fetchOsrmRoadGeometry(waypoints) {
 
 // Predict journey endpoint supporting Day/Date, Time, From, To
 // Powered by Google Maps Routes API v2 + OpenWeatherMap API + OSM Network
-export async function predictJourneyService({ date, day, time, from, to }) {
+export async function predictJourneyService({ date, day, time, from, to, isAutoTest = false }) {
   let resolvedDate = date;
   let resolvedDay = day;
 
@@ -1511,26 +1511,39 @@ export async function predictJourneyService({ date, day, time, from, to }) {
       q_value: rlPolicy?.qValue || 0.0,
       corridor_key: corridorIdentifier,
       success_rate: rlPolicy?.totalEpisodes > 0 ? `${((rlPolicy.successCount / rlPolicy.totalEpisodes) * 100).toFixed(0)}%` : 'Continuous Learning Active',
-    }
+    },
+    hour: Math.round(floatHour),
   };
 
-  // Auto-save prediction into PostgreSQL for ground-truth verification and reinforcement learning
-  recordPredictionForEvaluation({
-    from: fTrim,
-    to: tTrim,
-    origCoords,
-    destCoords,
-    corridorKey: corridorIdentifier,
-    hour: floatHour,
-    day: resolvedDay,
-    weather: liveWeather?.condition || 'Clear',
-    predictedTimeMin: travelTimeMin,
-    predictedSpeedKmh: speedKmh,
-    predictedLevel: trafficPrediction,
-    date: resolvedDate,
-    time: cleanTime,
-    evalDelayMinutes: isNow ? 1.5 : 4.0,
-  }).catch(() => { });
+  // Auto-save prediction into PostgreSQL as PENDING for future time-anchored ground-truth verification
+  let pendingRecord = null;
+  try {
+    pendingRecord = await recordPredictionForEvaluation({
+      from: fTrim,
+      to: tTrim,
+      origCoords,
+      destCoords,
+      corridorKey: corridorIdentifier,
+      hour: floatHour,
+      day: resolvedDay,
+      weather: liveWeather?.condition || 'Clear',
+      predictedTimeMin: travelTimeMin,
+      predictedSpeedKmh: speedKmh,
+      predictedLevel: trafficPrediction,
+      date: resolvedDate,
+      time: cleanTime,
+      evalDelayMinutes: isNow ? 1.5 : 4.0,
+    });
+  } catch (err) {
+    console.warn('[RL-Engine] Could not record pending prediction:', err.message);
+  }
+
+  if (pendingRecord) {
+    finalResult.pending_evaluation = pendingRecord;
+    finalResult.rl_pending_id = pendingRecord.id;
+    finalResult.rl_pending_status = 'PENDING';
+    finalResult.rl_target_time = pendingRecord.target_time_str;
+  }
 
   journeyPredictionCache.set(cacheKey, { timestamp: Date.now(), data: finalResult });
   return finalResult;

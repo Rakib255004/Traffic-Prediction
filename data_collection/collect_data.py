@@ -32,10 +32,11 @@ if os.path.exists(env_file):
                 k, v = line.split("=", 1)
                 os.environ.setdefault(k.strip(), v.strip().strip("\"'"))
 
-# Output Paths (Default to live snapshot to protect canonical training grid)
+# Output Paths
 DATA_DIR = os.path.join(os.path.dirname(__file__), "..", "data")
-CSV_PATH = os.path.join(DATA_DIR, "live_traffic_snapshot.csv")
+CSV_PATH = os.path.join(DATA_DIR, "traffic_data.csv")
 TRAINING_CSV_PATH = os.path.join(DATA_DIR, "traffic_data.csv")
+SNAPSHOT_CSV_PATH = os.path.join(DATA_DIR, "live_traffic_snapshot.csv")
 GEOJSON_PATH = os.path.join(DATA_DIR, "dhaka_roads.geojson")
 
 # ---------------------------------------------------------
@@ -1322,7 +1323,8 @@ def collect_current_snapshot(source: str = "corridors", limit: int = 50):
             "visibility_km": weather["visibility_km"],
             "surface_condition": weather["surface_condition"],
             "target_traffic_level": level,
-            "target_speed_kmh": speed
+            "target_speed_kmh": speed,
+            "free_flow_speed": free_flow_speed
         }
         new_rows.append(row)
 
@@ -1337,20 +1339,28 @@ def collect_current_snapshot(source: str = "corridors", limit: int = 50):
     df_new = pd.DataFrame(new_rows)
     os.makedirs(DATA_DIR, exist_ok=True)
 
-    if os.path.exists(CSV_PATH) and os.path.getsize(CSV_PATH) > 0:
+    # 1. Primary destination: Append to traffic_data.csv
+    if os.path.exists(TRAINING_CSV_PATH) and os.path.getsize(TRAINING_CSV_PATH) > 0:
         try:
-            df_old = pd.read_csv(CSV_PATH)
+            df_old = pd.read_csv(TRAINING_CSV_PATH)
             df_old.columns = df_old.columns.str.strip()
             df_combined = pd.concat([df_old, df_new], ignore_index=True)
-            df_combined.to_csv(CSV_PATH, index=False)
+            df_combined.to_csv(TRAINING_CSV_PATH, index=False)
         except Exception:
-            df_new.to_csv(CSV_PATH, mode="a", header=False, index=False)
+            df_new.to_csv(TRAINING_CSV_PATH, mode="a", header=False, index=False)
     else:
-        df_new.to_csv(CSV_PATH, mode="w", header=True, index=False)
+        df_new.to_csv(TRAINING_CSV_PATH, mode="w", header=True, index=False)
+
+    # 2. Also write to live_traffic_snapshot.csv as the latest live snapshot
+    try:
+        df_new.to_csv(SNAPSHOT_CSV_PATH, mode="w", header=True, index=False)
+    except Exception:
+        pass
 
     print("-" * 120)
     counts = df_new['traffic_level'].value_counts().to_dict()
-    print(f"SUCCESS: Appended {len(new_rows)} structured records -> {CSV_PATH}")
+    print(f"SUCCESS: Appended {len(new_rows)} structured records -> {TRAINING_CSV_PATH}")
+    print(f"Snapshot updated -> {SNAPSHOT_CSV_PATH}")
     print(f"Summary: {counts.get('NORMAL', 0)} Normal | {counts.get('MODERATE', 0)} Moderate | {counts.get('HEAVY', 0)} Heavy | {counts.get('SEVERE', 0)} Severe")
     print("=" * 120 + "\n")
 

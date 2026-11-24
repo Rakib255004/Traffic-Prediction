@@ -179,7 +179,17 @@ export async function recordPredictionForEvaluation({
     if (error) throw error;
 
     console.log(`[RL-Engine] Auto-saved prediction #${data.id} (${from} → ${to}, ${predictedTimeMin}m) scheduled for exact verification at ${targetTimeLabel} (${evalDueTime})`);
-    return data.id;
+    return {
+      id: data.id,
+      from_location: from,
+      to_location: to,
+      predicted_time_min: predictedTimeMin,
+      predicted_speed_kmh: predictedSpeedKmh,
+      predicted_level: predictedLevel,
+      status: 'PENDING',
+      target_time_str: targetTimeLabel,
+      eval_due_time: evalDueTime,
+    };
   } catch (err) {
     console.warn('[RL-Engine] Failed to auto-save prediction for RL evaluation:', err.message);
     return null;
@@ -231,12 +241,26 @@ export async function evaluatePendingPredictions({ currentPrediction = null, lim
       const destCoords = currentPrediction.destCoords || currentPrediction.dest_coords;
       const from = currentPrediction.from;
       const to = currentPrediction.to;
-      const predTime = parseFloat(currentPrediction.predictedTimeMin || currentPrediction.travel_time_min) || 18.0;
-      const predSpeed = parseFloat(currentPrediction.predictedSpeedKmh || currentPrediction.speed_kmh) || 22.0;
+      const predTime = parseFloat(currentPrediction.predictedTimeMin || currentPrediction.travel_time_min || currentPrediction.primary_route?.travel_time_min) || 18.0;
+      const predSpeed = parseFloat(currentPrediction.predictedSpeedKmh || currentPrediction.speed_kmh || currentPrediction.primary_route?.speed_kmh) || 22.0;
       const predLevel = currentPrediction.predictedLevel || currentPrediction.traffic_prediction || 'Low';
       const corridorKey = normalizeCorridorKey(from, to, currentPrediction.corridorKey);
-      const hourBucket = Math.max(0, Math.min(23, Math.floor(currentPrediction.hour != null ? currentPrediction.hour : new Date().getHours())));
+
+      // Parse the simulated journey hour (from currentPrediction.hour or currentPrediction.time e.g. "09:45")
+      let hourBucket = null;
+      if (currentPrediction.hour != null && !isNaN(parseInt(currentPrediction.hour, 10))) {
+        hourBucket = parseInt(currentPrediction.hour, 10);
+      } else if (currentPrediction.time && typeof currentPrediction.time === 'string') {
+        const h = parseInt(currentPrediction.time.split(':')[0], 10);
+        if (!isNaN(h)) hourBucket = h;
+      }
+      if (hourBucket == null) hourBucket = new Date().getHours();
+      hourBucket = Math.max(0, Math.min(23, hourBucket));
+
       const dayType = currentPrediction.dayType || (['friday', 'saturday'].includes((currentPrediction.day || '').toLowerCase()) ? 'weekend' : 'weekday');
+      const targetTimeLabel = currentPrediction.target_time_str 
+        || (currentPrediction.time ? `${currentPrediction.date || 'Today'} at ${currentPrediction.time} (${dayType})` : null)
+        || `${String(hourBucket).padStart(2, '0')}:00 (${dayType})`;
 
       let googleData = null;
       if (origCoords && destCoords && origCoords.length >= 2 && destCoords.length >= 2 && googleRoutesClient.hasKey) {
@@ -328,6 +352,7 @@ export async function evaluatePendingPredictions({ currentPrediction = null, lim
           error_pct: errorPct,
           reward: reward,
           status: status,
+          target_time_str: targetTimeLabel,
           eval_due_time: new Date().toISOString(),
           evaluated_at: new Date().toISOString(),
         });
@@ -1073,12 +1098,12 @@ export async function getRlStatus() {
       .select('*', { count: 'exact', head: true })
       .eq('status', 'PENDING');
 
-    // 3. Recent 25 evaluations
+    // 3. Recent 100 evaluations (including active PENDING queue and recent results)
     const { data: recentEvals } = await supabase
       .from('rl_prediction_evaluations')
       .select('*')
       .order('id', { ascending: false })
-      .limit(25);
+      .limit(100);
 
     // 4. Learned policies count (top 15)
     const { data: policies } = await supabase

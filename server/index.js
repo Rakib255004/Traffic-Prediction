@@ -366,8 +366,8 @@ app.post('/api/predict', (req, res) => {
 // Powered by Google Maps Routes API v2 + OpenWeatherMap API + OSM Network
 app.post('/api/predict-journey', async (req, res) => {
   try {
-    const { date, day, time, from, to } = req.body || {};
-    const result = await predictJourneyService({ date, day, time, from, to });
+    const { date, day, time, from, to, isAutoTest } = req.body || {};
+    const result = await predictJourneyService({ date, day, time, from, to, isAutoTest });
 
     // Asynchronously log journey prediction to PostgreSQL (non-blocking)
     if (supabase && result) {

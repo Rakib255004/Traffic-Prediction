@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { fetchRlStatus, trainRlRealLife } from '../api.js';
+import { fetchRlStatus, evaluateRlNow } from '../api.js';
 import { ALL_ROUTES } from '../utils/dhakaRoutesData.js';
 
 export default function ReinforcementPage() {
@@ -12,6 +12,7 @@ export default function ReinforcementPage() {
   const [episodeFilter, setEpisodeFilter] = useState('ALL'); // ALL, SUCCESS, FAIL, PENDING
   const [hoveredSlice, setHoveredSlice] = useState(null);
   const [routeSearch, setRouteSearch] = useState('');
+  const [evaluatingPending, setEvaluatingPending] = useState(false);
 
   const isFetchingRef = useRef(false);
   const dataRef = useRef(null);
@@ -96,12 +97,6 @@ export default function ReinforcementPage() {
   // Route-to-Route All 98 Corridors Matrix
   const allRoutesMatrix = useMemo(() => {
     const list = (ALL_ROUTES && ALL_ROUTES.length > 0) ? ALL_ROUTES : [];
-    const breakdownMap = new Map();
-    if (trainingResult?.route_breakdown) {
-      trainingResult.route_breakdown.forEach(b => {
-        breakdownMap.set(b.code, b);
-      });
-    }
 
     const learnedMap = new Map();
     if (data?.learned_corridors) {
@@ -111,22 +106,20 @@ export default function ReinforcementPage() {
     }
 
     return list.map((r, idx) => {
-      const b = breakdownMap.get(r.route_id);
       const learned = learnedMap.get(r.route_id);
       const parts = (r.route_path || '').split('->').map(s => s.trim());
       const fromLoc = parts[0] || 'Origin';
       const toLoc = parts[parts.length - 1] || 'Destination';
 
-      const episodes = b?.episodes || learned?.total_episodes || (trainingResult ? Math.max(1, Math.round(trainCount / 98)) : 0);
-      const avgError = b?.avg_error_pct != null
-        ? b.avg_error_pct
-        : (learned?.last_error_pct != null ? learned.last_error_pct : Number((9.8 + ((idx * 3) % 8)).toFixed(1)));
-      const successRate = b?.success_rate_pct != null
-        ? `${b.success_rate_pct}%`
-        : (learned?.success_rate || `${Math.min(98, Math.max(85, Math.round(100 - avgError)))}%`);
-      const speedMult = b?.speed_multiplier || learned?.speed_multiplier || Number((1.0 + ((idx % 5) - 2) * 0.02).toFixed(2));
-      const delayMult = b?.delay_multiplier || learned?.delay_multiplier || Number((1.0 + ((idx % 7) - 3) * 0.02).toFixed(2));
-      const qVal = b?.q_value ?? learned?.q_value ?? Number((0.68 + ((idx % 4) * 0.08)).toFixed(2));
+      const episodes = learned?.total_episodes || 0;
+      const avgError = learned?.last_error_pct != null
+        ? learned.last_error_pct
+        : Number((9.8 + ((idx * 3) % 8)).toFixed(1));
+      const successRate = learned?.success_rate
+        || (episodes > 0 ? `${Math.min(98, Math.max(85, Math.round(100 - avgError)))}%` : '—');
+      const speedMult = learned?.speed_multiplier || Number((1.0 + ((idx % 5) - 2) * 0.02).toFixed(2));
+      const delayMult = learned?.delay_multiplier || Number((1.0 + ((idx % 7) - 3) * 0.02).toFixed(2));
+      const qVal = learned?.q_value ?? Number((0.68 + ((idx % 4) * 0.08)).toFixed(2));
 
       return {
         id: r.route_id,
@@ -144,7 +137,7 @@ export default function ReinforcementPage() {
         qVal,
       };
     });
-  }, [trainingResult, data?.learned_corridors, trainCount]);
+  }, [data?.learned_corridors]);
 
   const filteredRoutesMatrix = useMemo(() => {
     if (!routeSearch.trim()) return allRoutesMatrix;
@@ -213,6 +206,26 @@ export default function ReinforcementPage() {
               </span>
             )}
           </div>
+          <button
+            onClick={async () => {
+              setEvaluatingPending(true);
+              try {
+                await evaluateRlNow(null, 5);
+                setCountdown(20);
+                await loadData(true);
+              } catch (e) {
+                console.warn('Evaluation error:', e);
+              } finally {
+                setEvaluatingPending(false);
+              }
+            }}
+            disabled={evaluatingPending || refreshing}
+            className="px-3.5 py-2 text-xs font-semibold bg-indigo-50 hover:bg-indigo-100 active:scale-95 text-indigo-700 rounded-xl transition flex items-center gap-1.5 border border-indigo-200 disabled:opacity-50 cursor-pointer shadow-2xs"
+            title="Evaluate due pending predictions against real live road data"
+          >
+            <span>⚡</span>
+            <span>{evaluatingPending ? 'Comparing...' : 'Verify Pending with Ground Truth'}</span>
+          </button>
           <button
             onClick={() => {
               setCountdown(20);

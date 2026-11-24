@@ -375,7 +375,7 @@ export default function TrafficJourneyPredictor() {
 
     setLoading(true);
     try {
-      // 1. Run Journey Prediction
+      // 1. Run Journey Prediction — automatically saved to PostgreSQL RL table as PENDING
       const predData = await predictJourneyApi({
         date: dateStr,
         day: dayNameStr,
@@ -388,41 +388,37 @@ export default function TrafficJourneyPredictor() {
 
       setResult(predData);
 
-      // 2. Immediately feed into Reinforcement Learning evaluation engine
-      let evalResult = null;
-      try {
-        evalResult = await triggerRlImmediateEvaluation(predData);
-      } catch (e) {
-        console.warn('[Auto-RL] Immediate eval warning:', e.message);
-      }
-
-      const evalItem = evalResult?.results?.[0] || null;
-      const isSuccess = evalItem ? evalItem.status === 'SUCCESS' : ((predData?.primary_route?.traffic_delay_min || 0) < 12);
-      const reward = evalItem?.reward != null ? evalItem.reward : (isSuccess ? 0.6 : -0.2);
-      const errorPct = evalItem?.error_pct != null ? evalItem.error_pct : (isSuccess ? 8.2 : 23.5);
+      // Extract the exact pending record created in PostgreSQL
+      const pendingInfo = predData?.pending_evaluation || null;
+      const predDuration = predData?.primary_route?.travel_time_min || predData?.travel_time_min || 0;
+      const predLevel = predData?.traffic_prediction || 'Medium';
 
       setAutoLoopCount(prev => prev + 1);
-      setAutoLoopStats(prev => ({
-        successCount: prev.successCount + (isSuccess ? 1 : 0),
-        failCount: prev.failCount + (isSuccess ? 0 : 1),
+      setAutoLoopStats({
+        pendingId: pendingInfo?.id || predData?.rl_pending_id || null,
         lastRoute: `${chosenRoute.route_id || `R${idx + 1}`}: ${from} → ${to}`,
-        lastReward: reward,
-        lastErrorPct: errorPct,
-        lastStatus: isSuccess ? 'SUCCESS' : 'FAIL',
-      }));
+        lastDate: dateStr,
+        lastTime: timeStr,
+        lastDay: dayNameStr,
+        lastDuration: predDuration,
+        lastLevel: predLevel,
+        lastTargetTimeStr: pendingInfo?.target_time_str || predData?.rl_target_time || `${dateStr} at ${timeStr} (${dayNameStr})`,
+        lastStatus: 'PENDING',
+        evalDueTime: pendingInfo?.eval_due_time || null,
+      });
     } catch (err) {
       console.warn('[Auto-RL] Cycle warning:', err.message);
     } finally {
       setLoading(false);
     }
 
-    // Pause briefly (2.5s) so user sees the route, time, and live RL comparison, then automatically take the next journey
+    // Pause briefly (2.2s) so user sees the route, time, and PENDING ticket, then automatically take the next journey
     if (autoLoopRunningRef.current) {
       autoLoopTimeoutRef.current = setTimeout(() => {
         if (autoLoopRunningRef.current) {
           executeNextAutoJourney();
         }
-      }, 2500);
+      }, 2200);
     }
   }, [DATE_OFFSETS, TIME_VARIANTS]);
 
@@ -834,13 +830,18 @@ export default function TrafficJourneyPredictor() {
 
           {/* Active Auto-Testing Banner */}
           {isAutoLooping && (
-            <div className="mt-4 p-4 bg-gradient-to-r from-emerald-50 via-teal-50 to-indigo-50 border border-emerald-300 rounded-2xl text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
+            <div className="mt-4 p-4 bg-gradient-to-r from-amber-50/80 via-indigo-50/70 to-emerald-50/80 border border-amber-300 rounded-2xl text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
               <div className="flex items-center gap-2.5">
-                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-ping"></span>
+                <span className="w-2.5 h-2.5 rounded-full bg-amber-500 animate-ping"></span>
                 <div>
-                  <span className="font-bold text-slate-900">Continuous RL Journey Testing Active</span>
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-slate-900">Continuous RL Journey Auto-Testing Active</span>
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
+                      ⏳ Queued as PENDING
+                    </span>
+                  </div>
                   <p className="text-slate-600 mt-0.5">
-                    Episode <strong className="text-emerald-700 font-mono">#{autoLoopCount}</strong> &bull; Auto-generating place-to-place combinations, computing travel times, and training Q-learning multipliers.
+                    Journey <strong className="text-indigo-700 font-mono">#{autoLoopCount}</strong> &bull; Auto-generating place-to-place combinations, computing exact travel times, and storing in RL queue for real-life ground data comparison.
                   </p>
                 </div>
               </div>
@@ -850,15 +851,14 @@ export default function TrafficJourneyPredictor() {
                   <span className="px-2.5 py-1 rounded-lg bg-white border border-slate-200 text-slate-800 font-semibold shadow-2xs">
                     {autoLoopStats.lastRoute}
                   </span>
-                  <span className={`px-2.5 py-1 rounded-lg font-bold border ${
-                    autoLoopStats.lastStatus === 'SUCCESS'
-                      ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
-                      : 'bg-rose-100 text-rose-800 border-rose-300'
-                  }`}>
-                    {autoLoopStats.lastStatus} ({autoLoopStats.lastErrorPct}% err)
+                  <span className="px-2.5 py-1 rounded-lg bg-indigo-50 border border-indigo-200 text-indigo-700 font-bold">
+                    {autoLoopStats.lastTargetTimeStr}
                   </span>
-                  <span className="px-2 py-1 rounded-lg bg-indigo-50 border border-indigo-200 text-indigo-700 font-bold">
-                    Reward: {autoLoopStats.lastReward >= 0 ? `+${autoLoopStats.lastReward}` : autoLoopStats.lastReward}
+                  <span className="px-2.5 py-1 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800 font-bold">
+                    {autoLoopStats.lastDuration}m ({autoLoopStats.lastLevel})
+                  </span>
+                  <span className="px-2.5 py-1 rounded-lg font-bold bg-amber-100 text-amber-800 border border-amber-300">
+                    PENDING {autoLoopStats.pendingId ? `(#${autoLoopStats.pendingId})` : ''}
                   </span>
                 </div>
               )}
