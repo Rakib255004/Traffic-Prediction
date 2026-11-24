@@ -9,6 +9,10 @@ envVars:
     value: 10000
   - key: HOST
     value: 0.0.0.0
+  - key: SUPABASE_URL
+    value: https://uqmenjjgdmvicagrxjop.supabase.co
+  - key: SUPABASE_ANON_KEY
+    value: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVxbWVuampnZG12aWNhZ3J4am9wIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTUxMTEyNjYsImV4cCI6MjExMDY4NzI2Nn0.OGBblgkdY0EgsBorWHp6lsxBLFxqwaYaiHGxjuS_rro
   - key: GOOGLE_MAPS_API_KEYS
     sync: false
   - key: GOOGLE_MAPS_API_KEY
