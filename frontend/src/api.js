@@ -26,6 +26,31 @@ export async function fetchWithTimeout(url, options = {}, timeoutMs = FETCH_TIME
   }
 }
 
+// Resilient GET/POST helper that retries once after a short delay on Render cold-start 503/network error
+export async function fetchJsonWithRetry(url, options = {}, timeoutMs = FETCH_TIMEOUT_MS, retryDelayMs = 3000) {
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const res = await fetchWithTimeout(url, options, timeoutMs);
+      if (res.ok) {
+        return await res.json();
+      }
+      // Retry transient 502/503/504 wake-up status codes
+      if (attempt === 0 && (res.status === 502 || res.status === 503 || res.status === 504)) {
+        await new Promise(r => setTimeout(r, retryDelayMs));
+        continue;
+      }
+      return null;
+    } catch (err) {
+      if (attempt === 0) {
+        await new Promise(r => setTimeout(r, retryDelayMs));
+      } else {
+        throw err;
+      }
+    }
+  }
+  return null;
+}
+
 // ── Render Keep-Alive: Warm up the backend as soon as the app loads ─────────────
 // Sends a lightweight GET to /api/health on first page load so Render wakes up
 // before the user clicks any button. Silent — no errors shown to the user.
@@ -79,11 +104,8 @@ function generateFallbackRoutes() {
 
 export async function fetchStats() {
   try {
-    const res = await fetchWithTimeout(`${API_BASE}/stats`);
-    if (res.ok) {
-      const json = await res.json();
-      if (json && json.success) return json;
-    }
+    const json = await fetchJsonWithRetry(`${API_BASE}/stats`);
+    if (json && json.success) return json;
   } catch (err) {
     console.warn('[API] /api/stats unavailable, utilizing client fallback:', err.message);
   }
@@ -125,11 +147,8 @@ export async function fetchRoutes(params = {}) {
     if (params.level && params.level !== 'ALL') query.set('level', params.level);
     if (params.search) query.set('search', params.search);
 
-    const res = await fetchWithTimeout(`${API_BASE}/routes?${query.toString()}`);
-    if (res.ok) {
-      const json = await res.json();
-      if (json && json.success) return json;
-    }
+    const json = await fetchJsonWithRetry(`${API_BASE}/routes?${query.toString()}`);
+    if (json && json.success) return json;
   } catch (err) {
     console.warn('[API] /api/routes unavailable, utilizing client fallback:', err.message);
   }
@@ -216,31 +235,7 @@ export async function fetchCorridorsOverlay() {
   return { success: false, corridors: [], isOffline: true };
 }
 
-export async function fetchHistory(params = {}) {
-  try {
-    const query = new URLSearchParams();
-    if (params.page) query.set('page', params.page);
-    if (params.limit) query.set('limit', params.limit);
-    if (params.all) query.set('all', 'true');
-    if (params.compact) query.set('compact', 'true');
-    if (params.level && params.level !== 'ALL') query.set('level', params.level);
-    if (params.search) query.set('search', params.search);
-    query.set('_t', Date.now());
-
-    // Allow generous 30s timeout for full historical dataset download across cloud
-    const res = await fetchWithTimeout(`${API_BASE}/history?${query.toString()}`, {
-      cache: 'no-store',
-      headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' }
-    }, 30000);
-    if (res.ok) {
-      const json = await res.json();
-      if (json && json.success) return json;
-    }
-  } catch (err) {
-    console.warn('[API] /api/history unavailable, generating representative client history:', err.message);
-  }
-
-  // Generate realistic representative history for Traffic Insights charts
+function generateRepresentativeHistoryRecords() {
   const levels = ['NORMAL', 'NORMAL', 'MODERATE', 'NORMAL', 'HEAVY', 'NORMAL', 'MODERATE'];
   const weathers = ['Clear', 'Clear', 'Cloudy', 'Clear', 'Rain', 'Cloudy', 'Fog'];
   const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -268,7 +263,59 @@ export async function fetchHistory(params = {}) {
       timestamp: `2026-11-10 ${String(hour).padStart(2, '0')}:${String((i * 7) % 60).padStart(2, '0')}`
     });
   }
+  return records;
+}
 
+export async function fetchTrafficInsights() {
+  try {
+    const json = await fetchJsonWithRetry(`${API_BASE}/insights?_t=${Date.now()}`, {
+      cache: 'no-store',
+      headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' }
+    }, 20000);
+    if (json && json.success && json.data) {
+      return {
+        success: true,
+        isInsightsSummary: true,
+        total: json.total || json.data.total || 0,
+        data: json.data,
+        isOffline: false,
+      };
+    }
+  } catch (err) {
+    console.warn('[API] /api/insights unavailable, utilizing representative fallback:', err.message);
+  }
+
+  const records = generateRepresentativeHistoryRecords();
+  return {
+    success: true,
+    isInsightsSummary: false,
+    total: records.length,
+    data: records,
+    isOffline: true,
+  };
+}
+
+export async function fetchHistory(params = {}) {
+  try {
+    const query = new URLSearchParams();
+    if (params.page) query.set('page', params.page);
+    if (params.limit) query.set('limit', params.limit);
+    if (params.all) query.set('all', 'true');
+    if (params.compact) query.set('compact', 'true');
+    if (params.level && params.level !== 'ALL') query.set('level', params.level);
+    if (params.search) query.set('search', params.search);
+    query.set('_t', Date.now());
+
+    const json = await fetchJsonWithRetry(`${API_BASE}/history?${query.toString()}`, {
+      cache: 'no-store',
+      headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' }
+    }, 20000);
+    if (json && json.success) return json;
+  } catch (err) {
+    console.warn('[API] /api/history unavailable, generating representative client history:', err.message);
+  }
+
+  const records = generateRepresentativeHistoryRecords();
   const limit = params.limit || 5000;
   return {
     success: true,
@@ -611,11 +658,8 @@ function generateFallbackRlStatus() {
 
 export async function fetchRlStatus() {
   try {
-    const res = await fetchWithTimeout(`${API_BASE}/rl/status`);
-    if (res.ok) {
-      const json = await res.json();
-      if (json && json.success && json.data && json.data.active) return json.data;
-    }
+    const json = await fetchJsonWithRetry(`${API_BASE}/rl/status`);
+    if (json && json.success && json.data && json.data.active) return json.data;
   } catch (err) {
     console.warn('[API] /api/rl/status fetch error:', err.message);
   }

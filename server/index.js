@@ -8,6 +8,9 @@ import {
   getAllRoutesTelemetry,
   getDashboardStats,
   loadTrafficData,
+  getTrafficInsightsSummary,
+  getRouteAnalyticsSummary,
+  getTrafficHistorySlice,
   evaluateAlternativeRoutes,
   simulatePrediction,
   predictJourneyService,
@@ -167,6 +170,7 @@ app.get('/api/waypoints', (req, res) => {
 });
 
 // 5. Historical Dataset Explorer with Pagination & Filters
+// 5. Historical CSV Telemetry Logs (bounded streaming slice; zero OOM)
 app.get('/api/history', (req, res) => {
   try {
     res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
@@ -180,58 +184,41 @@ app.get('/api/history', (req, res) => {
     const archiveFile = req.query.archive || req.query.file || null;
     const fromDate = req.query.from_date || req.query.start_date || null;
     const toDate = req.query.to_date || req.query.end_date || null;
-
-    let records = loadTrafficData(archiveFile);
-
-    if (fromDate) {
-      records = records.filter(r => String(r.timestamp || '') >= fromDate);
-    }
-    if (toDate) {
-      records = records.filter(r => String(r.timestamp || '') <= toDate + ' 23:59');
-    }
-
-    if (level && level !== 'ALL') {
-      records = records.filter(r => (r.traffic_level || '').toUpperCase() === level.toUpperCase());
-    }
-
-    if (search) {
-      records = records.filter(r => {
-        const idStr = String(r.road_route_id || '').toLowerCase();
-        const osmStr = String(r.osm_id || '').toLowerCase();
-        const weatherStr = String(r.weather || '').toLowerCase();
-        return idStr.includes(search) || osmStr.includes(search) || weatherStr.includes(search);
-      });
-    }
-
-    const total = records.length;
-    const limit = isAll ? total : (rawLimit && rawLimit > 0 ? rawLimit : 20);
     const page = parseInt(req.query.page, 10) || 1;
-    const startIndex = isAll ? 0 : (page - 1) * limit;
-    let paginated = isAll ? records : records.slice(startIndex, startIndex + limit);
 
-    // Fast compact mode for dashboard analytics (transfers 1MB instead of 50MB)
-    if (req.query.compact === 'true') {
-      paginated = paginated.map(r => ({
-        timestamp: r.timestamp,
-        hour: r.hour,
-        traffic_level: r.traffic_level || r.target_traffic_level,
-        traffic_speed_kmh: r.traffic_speed_kmh,
-        traffic_delay_min: r.traffic_delay_min,
-        road_route_id: r.road_route_id,
-        weather: r.weather || 'Clear',
-        road_type: r.road_type || 'Primary Arterial',
-        day_of_week: r.day_of_week || '',
-        congestion_ratio: r.congestion_ratio || 1.0,
-      }));
-    }
+    const result = getTrafficHistorySlice({
+      archiveFile,
+      fromDate,
+      toDate,
+      level,
+      search,
+      page,
+      limit: rawLimit || 20,
+      all: isAll,
+    });
 
     res.json({
       success: true,
-      total,
-      page: isAll ? 1 : page,
-      limit,
-      totalPages: isAll ? 1 : Math.ceil(total / limit),
-      data: paginated
+      ...result,
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 5b. Pre-Aggregated Traffic Insights Summary across ALL 212k+ CSV records (~15 KB payload)
+app.get('/api/insights', (req, res) => {
+  try {
+    res.setHeader('Cache-Control', 'public, max-age=15');
+    const summary = getTrafficInsightsSummary();
+    if (!summary) {
+      return res.json({ success: true, total: 0, data: null });
+    }
+    res.json({
+      success: true,
+      isInsightsSummary: true,
+      total: summary.total,
+      data: summary,
     });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -261,55 +248,12 @@ app.get('/api/archives', (req, res) => {
 // 5.1 Route Analytics: all 98 corridors ranked from most data to least
 app.get('/api/analytics/routes', (req, res) => {
   try {
-    const records = loadTrafficData();
-    const routeCounts = {};
-    records.forEach(r => {
-      const id = r.road_route_id || 'Unknown';
-      if (!routeCounts[id]) {
-        routeCounts[id] = { total: 0, congested: 0, normal: 0, moderate: 0, heavy: 0, severe: 0, speeds: [] };
-      }
-      routeCounts[id].total++;
-      const lvl = (r.traffic_level || '').toUpperCase();
-      if (lvl === 'NORMAL') {
-        routeCounts[id].normal++;
-      } else if (lvl === 'MODERATE' || lvl === 'SLOW') {
-        routeCounts[id].moderate++;
-        routeCounts[id].congested++;
-      } else if (lvl === 'HEAVY') {
-        routeCounts[id].heavy++;
-        routeCounts[id].congested++;
-      } else if (lvl === 'SEVERE' || lvl === 'TRAFFIC_JAM') {
-        routeCounts[id].severe++;
-        routeCounts[id].congested++;
-      } else {
-        routeCounts[id].normal++;
-      }
-      const s = parseFloat(r.traffic_speed_kmh);
-      if (!isNaN(s)) routeCounts[id].speeds.push(s);
-    });
-
-    const routesRanked = Object.entries(routeCounts).map(([name, v]) => {
-      const m = name.match(/^(R\d{2}):\s*(.*)$/);
-      return {
-        route_id: name,
-        route_code: m ? m[1] : '',
-        name: m ? m[2] : name,
-        total: v.total,
-        congested: v.congested,
-        normal: v.normal,
-        moderate: v.moderate,
-        heavy: v.heavy,
-        severe: v.severe,
-        pct: Math.round((v.congested / v.total) * 100),
-        avg_speed: v.speeds.length ? Number((v.speeds.reduce((a, b) => a + b, 0) / v.speeds.length).toFixed(1)) : 25.0
-      };
-    }).sort((a, b) => b.total - a.total);
-
+    const { routes, totalRecords } = getRouteAnalyticsSummary();
     res.json({
       success: true,
-      totalRoutes: routesRanked.length,
-      totalRecords: records.length,
-      routes: routesRanked
+      totalRoutes: routes.length,
+      totalRecords,
+      routes
     });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });

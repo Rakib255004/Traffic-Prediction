@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { fetchHistory } from '../api.js';
+import { fetchTrafficInsights } from '../api.js';
 import { ALL_ROUTES } from '../utils/dhakaRoutesData.js';
 
 // Simple bar chart component (no external library needed)
@@ -552,6 +552,7 @@ export default function TrafficInsights() {
   };
 
   const [records, setRecords]           = useState(() => cachedHistoryData?.records || []);
+  const [precomputedStats, setPrecomputedStats] = useState(() => cachedHistoryData?.stats || null);
   const [loading, setLoading]           = useState(() => !cachedHistoryData);
   const [isSyncing, setIsSyncing]       = useState(false);
   const [lastSynced, setLastSynced]     = useState(() => cachedHistoryData?.lastSynced || null);
@@ -571,27 +572,46 @@ export default function TrafficInsights() {
     }
     setError(null);
     try {
-      const res = await fetchHistory({ page: 1, limit: 10000, all: true, compact: true });
+      const res = await fetchTrafficInsights();
       if (res && res.success) {
-        const recs = res.data || [];
-        const tot = res.total || recs.length || 0;
         const off = Boolean(res.isOffline);
         const now = new Date();
 
-        // Only cache live server data into memory cache
-        if (!off) {
-          cachedHistoryData = {
-            records: recs,
-            total: tot,
-            isOffline: off,
-            lastSynced: now,
-          };
+        if (res.isInsightsSummary && res.data) {
+          const summaryStats = res.data;
+          const tot = res.total || summaryStats.total || 0;
+          if (!off) {
+            cachedHistoryData = {
+              stats: summaryStats,
+              records: [],
+              total: tot,
+              isOffline: off,
+              lastSynced: now,
+            };
+          }
+          setPrecomputedStats(summaryStats);
+          setRecords([]);
+          setTotalRecords(tot);
+          setIsOffline(off);
+          setLastSynced(now);
+        } else {
+          const recs = Array.isArray(res.data) ? res.data : [];
+          const tot = res.total || recs.length || 0;
+          if (!off) {
+            cachedHistoryData = {
+              stats: null,
+              records: recs,
+              total: tot,
+              isOffline: off,
+              lastSynced: now,
+            };
+          }
+          setPrecomputedStats(null);
+          setRecords(recs);
+          setTotalRecords(tot);
+          setIsOffline(off);
+          setLastSynced(now);
         }
-
-        setRecords(recs);
-        setTotalRecords(tot);
-        setIsOffline(off);
-        setLastSynced(now);
       }
     } catch (e) {
       console.warn('History load error:', e);
@@ -609,14 +629,15 @@ export default function TrafficInsights() {
     loadData(true);
   }, []);
 
-  // Periodic auto-sync
+  // Periodic auto-sync — retries every 5s when offline (Render cold-start), 20s when live
   useEffect(() => {
     if (!autoSync) return;
+    const effectiveInterval = isOffline ? 5000 : syncIntervalSec * 1000;
     const interval = setInterval(() => {
       loadData(false);
-    }, syncIntervalSec * 1000);
+    }, effectiveInterval);
     return () => clearInterval(interval);
-  }, [autoSync, syncIntervalSec]);
+  }, [autoSync, syncIntervalSec, isOffline]);
 
   // Format sync timestamp
   const formatSyncTime = (date) => {
@@ -624,8 +645,9 @@ export default function TrafficInsights() {
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
   };
 
-  // Compute stats from records
+  // Compute stats from records or return pre-aggregated server summary directly
   const stats = useMemo(() => {
+    if (precomputedStats) return precomputedStats;
     if (!records.length) return null;
 
     // Traffic level distribution (4 canonical classes: Normal | Moderate | Heavy | Severe)
@@ -1021,7 +1043,7 @@ export default function TrafficInsights() {
       dateRange,
       total: totalRecords
     };
-  }, [records, totalRecords]);
+  }, [precomputedStats, records, totalRecords]);
 
   if (loading) {
     return (
@@ -1032,7 +1054,7 @@ export default function TrafficInsights() {
     );
   }
 
-  if (error && (!records || records.length === 0)) {
+  if (error && !precomputedStats && (!records || records.length === 0)) {
     return (
       <div className="bg-red-50 border border-red-200 rounded-xl p-5 text-sm text-red-700 flex flex-col items-start gap-3">
         <p>{error}</p>
@@ -1065,7 +1087,7 @@ export default function TrafficInsights() {
             {isOffline ? (
               <span className="inline-flex items-center gap-1.5 text-xs text-amber-700 bg-amber-50 border border-amber-200 px-3 py-1 rounded-full font-medium">
                 <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span>
-                Offline Representative Dataset
+                {isSyncing ? 'Connecting to server...' : 'Offline Representative Dataset'}
               </span>
             ) : (
               <span className="inline-flex items-center gap-1.5 text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-1 rounded-full font-medium">

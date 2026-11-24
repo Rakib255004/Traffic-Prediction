@@ -769,8 +769,8 @@ export async function run10HourTrainingSimulation({ corridorsCount = 50, startHo
  * @param {string|null} options.corridorFilter - Optional specific corridor filter
  */
 export async function trainWithRealLifeData({ sampleCount = 1000, corridorFilter = null } = {}) {
-  const { loadTrafficData } = await import('./trafficService.js');
-  const allRecords = loadTrafficData();
+  const { getRlTrainingSample } = await import('./trafficService.js');
+  const allRecords = getRlTrainingSample();
   if (!allRecords || allRecords.length === 0) {
     throw new Error('No ground-truth traffic data available to train against.');
   }
